@@ -5,15 +5,22 @@
 
 ## This is Ridian, _**R**_ in Obs _**idian**_
 
+Run R code in obsidian (cnd-r/cntrol-r to run a code chunk) and more
 
+
+Dispalys variables in the current environment for transparent coding:
 
 https://github.com/user-attachments/assets/6e21cee6-f287-4319-9cd9-6c152d8b2320
 
-
+Displays help pages for R packages:
 
 https://github.com/user-attachments/assets/196faac1-aa0a-4af2-8a78-a793a6032e09
 
+Inline R plots in your notes:
 
+https://github.com/user-attachments/assets/bb80a412-9616-4716-b5bc-37344e3f1996
+
+Inline htmlwidgets trough R:
 
 https://github.com/user-attachments/assets/e65af175-5fa8-4813-bf49-01997574a268
 
