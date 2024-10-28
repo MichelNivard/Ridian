@@ -7,23 +7,6 @@
 
 Run R code in obsidian (cnd-r/cntrol-r to run a code chunk) and more.
 
-> [!WARNING]
-> **EXTREMELY EARLY DEVELOPERS RELEASE, DO NOT USE ON YOUR PRECIOUS VAULT, SET UP A SEPERATE DEV-VAULT, OR COPY OF YOUR VAULT TO PLAY WITH THIS!!!**
-
-> [!NOTE]
->
-> Seculity Disclosures:
-> 
-> **Calls on External Executables:** This plugin Executes code in R, an external intepreter, code execution comes with risk, you should at altimes know whether the code is save, don't execute untrusted code. 
-> **File Access:** The plugin accesses temporary directories to store plots and widgets, which are then copied the Obsidian vault under the plots/ and widgets/ folders.
-
-
-> [!NOTE]
-> Known Issues:
-> 1. uses absolute paths for htmlwidgets
-> 2. Every note spins up an R process, if you do this for many notes you'll overwhlm memory
-> 3. Only tested on my personal macbook 
-
 
 **What this is:**
 
@@ -65,6 +48,26 @@ https://github.com/user-attachments/assets/bb80a412-9616-4716-b5bc-37344e3f1996
 Inline htmlwidgets trough R:
 
 https://github.com/user-attachments/assets/e65af175-5fa8-4813-bf49-01997574a268
+
+
+## Warnings, limitations and disclosures
+
+> [!WARNING]
+> **EXTREMELY EARLY DEVELOPERS RELEASE, DO NOT USE ON YOUR PRECIOUS VAULT, SET UP A SEPERATE DEV-VAULT, OR COPY OF YOUR VAULT TO PLAY WITH THIS!!!**
+
+> [!NOTE]
+>
+> Seculity Disclosures:
+> 
+> **Calls on External Executables:** This plugin Executes code in R, an external intepreter, code execution comes with risk, you should at altimes know whether the code is save, don't execute untrusted code. 
+> **File Access:** The plugin accesses temporary directories to store plots and widgets, which are then copied the Obsidian vault under the plots/ and widgets/ folders.
+
+
+> [!NOTE]
+> Known Issues:
+> 1. uses absolute paths for htmlwidgets
+> 2. Every note spins up an R process, if you do this for many notes you'll overwhlm memory
+> 3. Only tested on my personal macbook 
 
 
 
