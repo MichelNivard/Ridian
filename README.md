@@ -1,7 +1,7 @@
 
 
 
-## This is Ridian, _**R**_ in Obs_**idian**_
+## This is Ridian, _**R**_ in Obs _**idian**_
 
 
 
