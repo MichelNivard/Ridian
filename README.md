@@ -1,5 +1,5 @@
 
-![Ridian](https://github.com/user-attachments/assets/fbf70dac-9c0c-4f98-9b39-c9411e26fcda)
+<p align="center">![Ridian](https://github.com/user-attachments/assets/fbf70dac-9c0c-4f98-9b39-c9411e26fcda)</p>
 
 
 
