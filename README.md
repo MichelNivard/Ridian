@@ -10,9 +10,9 @@ Run R code in obsidian (cnd-r/cntrol-r to run a code chunk) and more.
 > [!WARNING]
 > **EXTREMELY EARLY DEVELOPERS RELEASE, DO NOT USE ON YOUR PRECIOUS VAULT, SET UP A SEPERATE DEV-VAULT, OR COPY OF YOUR VAULT TO PLAY WITH THIS!!!**
 
-> [!DISCLOSURES]
-> External Executables: This plugin requires R to be installed on your system. Please specify the path to your R executable in the plugin settings.
-> File Access: The plugin accesses temporary directories to store plots and widgets, which are then saved within the Obsidian vault under the plots/ and widgets/ folders.
+> [!NOTE]
+> External Executables: This plugin Executes code in R, an external intepreter, code execution comes with risk, you should at altimes know whether the code is save, don't execute untrusted code. 
+> File Access: The plugin accesses temporary directories to store plots and widgets, which are then copied the Obsidian vault under the plots/ and widgets/ folders.
 
 
 > [!NOTE]
