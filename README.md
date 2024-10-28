@@ -6,7 +6,14 @@
 ## This is Ridian, _**R**_ in Obs _**idian**_
 
 > [!WARNING]
-> **EXTREMELY EARLY DEVELOPERS RELEASE, DO NOT USE ON YOUR PRECIOUS VAULT, SET UP A SEPERATE DEV-VAULT, OR COPY OF YOUR VAULT TO PLAY WITH THIS!!!**
+> **EXTREMELY EARLY DEVELOPERS RELEASE, DO NOT USE ON YOUR MAIN VAULT**
+>
+> 1. Only confirmed to work on my mackbook
+> 2. no tests and other development necessities implemented
+> 3. No Contribution guilines
+>
+> 4.  **DO NOT USEE ON YOUR MAIN VAULT**
+> 
 
 
 
