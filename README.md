@@ -10,6 +10,18 @@ Run R code in obsidian (cnd-r/cntrol-r to run a code chunk) and more.
 > [!WARNING]
 > **EXTREMELY EARLY DEVELOPERS RELEASE, DO NOT USE ON YOUR PRECIOUS VAULT, SET UP A SEPERATE DEV-VAULT, OR COPY OF YOUR VAULT TO PLAY WITH THIS!!!**
 
+> [!DISCLOSURES]
+> External Executables: This plugin requires R to be installed on your system. Please specify the path to your R executable in the plugin settings.
+> File Access: The plugin accesses temporary directories to store plots and widgets, which are then saved within the Obsidian vault under the plots/ and widgets/ folders.
+
+
+> [!NOTE]
+> Known Issues:
+> 1. uses absolute paths for htmlwidgets
+> 2. Every note spins up an R process, if you do this for many notes you'll overwhlm memory
+> 3. Only tested on my personal macbook 
+
+
 **What this is:**
 
 - A way to run R code in Obsidian
@@ -19,7 +31,6 @@ Run R code in obsidian (cnd-r/cntrol-r to run a code chunk) and more.
 
 **What I want to add:**
 
--  WAY better R session management: right now you could easily overwhem your PC/Mac by runing codein many open notes
 -  Quarto/Rmarkdown export: a way to export notes with r code to .Rmd or .Qmd compliant files
 
 
