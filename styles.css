@@ -1,0 +1,110 @@
+
+/* Additional Custom R Run Button Styles */
+
+body {
+--file-line-width: 800px;
+}
+
+.readable.markdown-preview-view.is-readable-line-width .markdown-preview-sizer,
+.readable.is-live-preview.is-readable-line-width .cm-sizer,
+.readable.markdown-preview-view .markdown-preview-sizer,
+.readable.is-live-preview .cm-sizer {
+max-width: 800px; /* adjust according to preference */
+margin-left: auto;
+margin-right: auto;
+}
+
+
+
+
+.r-run-button {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  background-color: #e0e0e0;
+}
+
+.HyperMD-codeblock.HyperMD-codeblock-bg.cm-line {
+    width: 800px;
+    max-width: 800px !important
+}
+
+
+.r-run-button:hover {
+  background-color: #d0d0d0;
+}
+
+/* Custom Styling for OUTPUT Callout */
+@import url('https://fonts.googleapis.com/css?family=Fira+Mono');
+
+.cm.callout {
+    width: 800px;
+    max-width: 800px; !important
+}
+.callout {
+    width: 800px;
+    max-width: 800px; !important
+}
+
+.callout[data-callout="output"] {
+  background-color: var(--background-primary);
+  border-left: 3px solid var(--color-accent);
+    width: 800px;
+    max-width: 800px; !important
+}
+
+.callout[data-callout="output"] > .callout-title {
+  font-family: "Poppins", sans-serif;
+  font-weight: bold;
+}
+
+.callout[data-callout="output"] > .callout-content {
+  font-family: 'Monaco', 'Fira Mono', monospace;
+  max-height: calc(1.5em * 25);
+  overflow-y: auto;
+}
+
+.callout[data-callout="output"].is-collapsed > .callout-content {
+  max-height: calc(1.5em * 3);
+  overflow: hidden;
+  position: relative;
+}
+
+.callout[data-callout="output"].is-collapsed > .callout-content::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 1.5em;
+  background: linear-gradient(to bottom, transparent, var(--background-primary));
+}
+
+/* Dark Theme Adjustments */
+@media (prefers-color-scheme: dark) {
+  .callout[data-callout="output"] {
+    border-left: 3px solid var(--color-accent);
+  }
+
+  .callout[data-callout="output"].is-collapsed > .callout-content::after {
+    background: linear-gradient(to bottom, transparent);
+  }
+}
+
+/* Image Alignment */
+img[alt*="center"] {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+img[alt*="right"] {
+  float: right;
+  clear: right;
+  margin-left: 1rem;
+  margin-bottom: 2px;
+  margin-top: 2px;
+}
