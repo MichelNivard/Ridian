@@ -1,96 +1,204 @@
-# Obsidian Sample Plugin
+Certainly! Here's a **step-by-step installation guide** designed for users who may not be familiar with coding. This guide will help you manually install the **Ridian** plugin for Obsidian directly from GitHub.
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+---
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+## **📥 Ridian: Manual Installation Guide for Obsidian**
 
-**Note:** The Obsidian API is still in early alpha and is subject to change at any time!
+**Welcome!** This guide will walk you through the process of installing the **Ridian** plugin in Obsidian using files downloaded from GitHub. Follow the steps below to enhance your Obsidian experience with powerful R code execution capabilities.
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open Sample Modal" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+### **🔍 Prerequisites**
 
-## First time developing plugins?
+Before you begin, ensure you have the following:
 
-Quick starting guide for new plugin devs:
+1. **Obsidian Installed:**
+   - **Download Obsidian:** [Obsidian Official Website](https://obsidian.md/)
+   - **Installation Guide:** Follow the on-screen instructions to install Obsidian on your computer.
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+2. **R Installed on Your System:**
+   - **Download R:** [CRAN R Project](https://cran.r-project.org/)
+   - **Installation Guide:** Choose your operating system (Windows, macOS, Linux) and follow the installation instructions provided on the CRAN website.
 
-## Releasing new releases
+---
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+### **📝 Step 1: Download the Ridian Plugin Files**
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+1. **Visit the Plugin's GitHub Repository:**
+   - **URL:** [Ridian GitHub Repository](https://github.com/michelnivard/Ridian)  
 
-## Adding your plugin to the community plugin list
+2. **Navigate to the Releases Section:**
+   - On the repository page, look for the **"Releases"** tab (usually found on the right sidebar or under the repository name).
+   - **Click on "Releases"** to view all available versions of the plugin.
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+3. **Download the Latest Release:**
+   - **Find the Latest Version:** Releases are typically listed in descending order, with the latest at the top.
+   - **Download ZIP File:**
+     - Click on the **"Assets"** dropdown under the latest release.
+     - Click on **`r-code-evaluator.zip`** to download the plugin files as a ZIP archive.
 
-## How to use
 
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
+---
 
-## Manually installing the plugin
+### **🗂️ Step 2: Extract the Downloaded Files**
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+1. **Locate the Downloaded ZIP File:**
+   - Typically found in your **"Downloads"** folder.
 
-## Improve code quality with eslint (optional)
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- To use eslint with this project, make sure to install eslint from terminal:
-  - `npm install -g eslint`
-- To use eslint to analyze this project use this command:
-  - `eslint main.ts`
-  - eslint will then create a report with suggestions for code improvement by file and line number.
-- If your source code is in a folder, such as `src`, you can use eslint with this command to analyze all files in that folder:
-  - `eslint .\src\`
+2. **Extract the ZIP Archive:**
+   - **Windows:**
+     - Right-click on the `r-code-evaluator.zip` file.
+     - Select **"Extract All..."** and choose a destination folder.
+   - **macOS:**
+     - Double-click the `r-code-evaluator.zip` file.
+     - It will automatically extract to a folder with the same name.
+   - **Linux:**
+     - Use your file manager's extract option or run the following command in the terminal:
+       ```bash
+       unzip r-code-evaluator.zip -d r-code-evaluator
+       ```
 
-## Funding URL
 
-You can include funding URLs where people who use your plugin can financially support it.
+---
 
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
+### **📂 Step 3: Locate Obsidian’s Plugins Folder**
 
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
-```
+1. **Open Obsidian:**
+   - Launch the Obsidian application on your computer.
 
-If you have multiple URLs, you can also do:
+2. **Access Obsidian Settings:**
+   - Click on the **gear icon** (⚙️) in the bottom-left corner to open **Settings**.
 
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
-```
+3. **Navigate to Community Plugins:**
+   - In the Settings sidebar, click on **"Community plugins"**.
 
-## API Documentation
+4. **Open Plugins Folder:**
+   - Click on the **"Open plugins folder"** button.
 
-See https://github.com/obsidianmd/obsidian-api
+
+   - This action will open the **`.obsidian/plugins`** directory in your file explorer.
+
+---
+
+### **📦 Step 4: Install the Ridian Plugin**
+
+1. **Move the Plugin Files:**
+   - **Locate the Extracted Plugin Folder:**
+     - From Step 2, find the extracted `r-code-evaluator` folder.
+   - **Copy the Folder:**
+     - **Windows/macOS/Linux:**
+       - Right-click on the `r-code-evaluator` folder and select **"Copy"**.
+   - **Paste into Plugins Folder:**
+     - Navigate to the **`.obsidian/plugins`** folder opened in Step 3.
+     - Right-click inside the plugins folder and select **"Paste"**.
+   
+2. **Verify Plugin Installation:**
+   - Inside the **`.obsidian/plugins`** folder, you should now see the **`r-code-evaluator`** folder containing files like `manifest.json`, `main.js`, etc.
+
+---
+
+### **⚙️ Step 5: Enable the Plugin in Obsidian**
+
+1. **Return to Obsidian Settings:**
+   - If not already open, click on the **gear icon** (⚙️) in Obsidian to open **Settings**.
+
+2. **Access Community Plugins:**
+   - In the Settings sidebar, click on **"Community plugins"**.
+
+3. **Disable Safe Mode:**
+   - **Important:** To install third-party plugins, you need to disable **Safe mode**.
+   - Toggle **"Safe mode"** to **off**.
+   - A warning will appear; confirm by clicking **"Yes"** or **"Disable Safe Mode"**.
+
+4. **Enable the Ridian Plugin:**
+   - Scroll through the list of available plugins until you find **"Ridian"**.
+   - Toggle the switch next to **"Ridian"** to **on**.
+
+
+5. **Reload Obsidian (If Prompted):**
+   - Some plugins may require Obsidian to reload. If prompted, click **"Reload"** to activate the plugin.
+
+---
+
+### **🔧 Step 6: Configure the Ridian Plugin**
+
+1. **Access Plugin Settings:**
+   - In the Settings sidebar, click on **"Ridian"** under the **"Plugins"** section.
+
+2. **Set the Path to R Executable:**
+   - **Name:** **Path to R Executable**
+   - **Description:** Specify the full path to your R installation.
+   - **Example Paths:**
+     - **Windows:** `C:\Program Files\R\R-4.2.0\bin\R.exe`
+     - **macOS:** `/usr/local/bin/R`
+     - **Linux:** `/usr/bin/R`
+   - **How to Find R Path:**
+     - **Windows:**
+       - Open **File Explorer** and navigate to where R is installed (commonly `C:\Program Files\R\`).
+       - Locate `R.exe` inside the `bin` folder.
+     - **macOS/Linux:**
+       - Open **Terminal** and run:
+         ```bash
+         which R
+         ```
+       - This command will display the path to the R executable.
+
+   ![Set R Path](https://i.imgur.com/SetRPath.png)
+   
+   *(Illustrative Image: Replace with an actual screenshot if available.)*
+
+3. **Set the Path to RStudio Pandoc (If Required):**
+   - **Name:** **Path to RStudio Pandoc**
+   - **Description:** Specify the full path to your RStudio Pandoc installation.
+   - **Example Paths:**
+     - **Windows:** `C:\Program Files\RStudio\bin\pandoc`
+     - **macOS:** `/Applications/RStudio.app/Contents/MacOS/pandoc`
+     - **Linux:** `/usr/lib/rstudio/bin/pandoc`
+   - **How to Find Pandoc Path:**
+     - **Windows/macOS/Linux:**
+       - If you have RStudio installed, Pandoc is usually bundled within its installation directory.
+       - Use your file explorer to navigate to the RStudio installation folder and locate the `pandoc` directory.
+
+4. **Save Settings:**
+   - After entering the paths, click **"Save"** or ensure changes are automatically saved.
+
+---
+
+### **🚀 Step 7: Using the Ridian Plugin**
+
+1. **Open a Markdown Note:**
+   - In Obsidian, open or create a new markdown (`.md`) note where you want to execute R code.
+
+2. **Insert an R Code Chunk:**
+   - Use the following syntax to write R code within your note:
+     ```markdown
+     ```r
+     # Your R code here
+     ```
+     ```
+
+   - **Example:**
+     ```markdown
+     ```r
+     # Calculate the sum of two numbers
+     sum(5, 10)
+     ```
+     ```
+
+3. **Run the R Code Chunk:**
+   - **Command:**
+     - Press `Ctrl+R` (Windows/Linux) or `Cmd+R` (macOS) to run code chunks!
+
+4. **View Results:**
+   - After running the code, the output will appear below the code chunk.
+   - Plots and widgets generated by your R code will be displayed in the **right sidebar** under the **R Environment** and **R Help** views.
+
+---
+
+---
+
+### **🙌 Thank You!**
+
+You’ve successfully installed the **Ridian** plugin in Obsidian! Start integrating R code into your notes and leverage the power of data analysis and visualization directly within your Obsidian workspace.
+
+If you encounter any issues or have questions, feel free to reach out through the [GitHub Issues](https://github.com/yourusername/r-code-evaluator/issues) page or contact the plugin developer.
+
+Happy coding and note-taking! 📝✨
