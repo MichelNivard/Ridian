@@ -5,7 +5,27 @@
 
 ## This is Ridian, _**R**_ in Obs _**idian**_
 
-Run R code in obsidian (cnd-r/cntrol-r to run a code chunk) and more
+Run R code in obsidian (cnd-r/cntrol-r to run a code chunk) and more.
+
+
+**What this is:**
+
+- A way to run R code in Obsidian
+- A way to keep notes on Coding/Statistics with enbedded working example
+- A way to use Obsidians amazingsearch and links to link code snippets
+- A way to use R code snippets to add plots/widgets to your notes
+
+**What I want to add:**
+
+-  WAY better R session management: right now you could easily overwhem your PC/Mac by runing codein many open notes
+-  Quarto/Rmarkdown export: a way to export notes with r code to .Rmd or .Qmd compliant files
+
+
+**What this won't be:**
+
+- An Rstudio replacement
+- An RMarkdown/Quarto repalacement
+
 
 ## Ease coding by making R environment transparent:
 
