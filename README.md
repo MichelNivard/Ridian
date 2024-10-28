@@ -50,10 +50,8 @@ Inline htmlwidgets trough R:
 https://github.com/user-attachments/assets/e65af175-5fa8-4813-bf49-01997574a268
 
 
-## Warnings, limitations and disclosures
+## Disclosures and Issues:
 
-> [!WARNING]
-> **EXTREMELY EARLY DEVELOPERS RELEASE, DO NOT USE ON YOUR PRECIOUS VAULT, SET UP A SEPERATE DEV-VAULT, OR COPY OF YOUR VAULT TO PLAY WITH THIS!!!**
 
 > [!NOTE]
 >
