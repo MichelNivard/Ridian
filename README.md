@@ -7,6 +7,18 @@
 
 
 
+https://github.com/user-attachments/assets/6e21cee6-f287-4319-9cd9-6c152d8b2320
+
+
+
+https://github.com/user-attachments/assets/196faac1-aa0a-4af2-8a78-a793a6032e09
+
+
+
+https://github.com/user-attachments/assets/e65af175-5fa8-4813-bf49-01997574a268
+
+
+
 ## **📥 Ridian: Manual Installation Guide for Obsidian**
 
 **Welcome!** This guide will walk you through the process of installing the **Ridian** plugin in Obsidian using files downloaded from GitHub. Follow the steps below to enhance your Obsidian experience with powerful R code execution capabilities.
