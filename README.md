@@ -1,5 +1,10 @@
 
 
+
+## this is Ridian, **R** in Obs**idian**
+
+
+
 ## **📥 Ridian: Manual Installation Guide for Obsidian**
 
 **Welcome!** This guide will walk you through the process of installing the **Ridian** plugin in Obsidian using files downloaded from GitHub. Follow the steps below to enhance your Obsidian experience with powerful R code execution capabilities.
