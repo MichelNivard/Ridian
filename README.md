@@ -14,7 +14,7 @@ https://github.com/user-attachments/assets/6e21cee6-f287-4319-9cd9-6c152d8b2320
 
 Displays help pages for R packages:
 
-https://github.com/user-attachments/assets/196faac1-aa0a-4af2-8a78-a793a6032e09
+https://github.com/user-attachments/assets/d2f58b8a-5967-4227-a5f4-d4e263670875
 
 Inline R plots in your notes:
 
