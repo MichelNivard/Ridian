@@ -1,4 +1,6 @@
 
+![Ridian](https://github.com/user-attachments/assets/fbf70dac-9c0c-4f98-9b39-c9411e26fcda)
+
 
 
 ## This is Ridian, _**R**_ in Obs _**idian**_
