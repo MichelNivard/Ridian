@@ -23,7 +23,18 @@ Before you begin, ensure you have the following:
    - **Download R:** [CRAN R Project](https://cran.r-project.org/)
    - **Installation Guide:** Choose your operating system (Windows, macOS, Linux) and follow the installation instructions provided on the CRAN website.
 
+3. **Install PANDOC.**
+ -   Windows: Download and run the Pandoc installer from the latest release page.
+-   macOS: Install Pandoc using Homebrew with the command:
+```bash
+brew install pandoc
+```
 
+-   Linux: Install Pandoc via your distribution’s package manager, for example:
+```
+bash
+sudo apt-get install pandoc
+```
 
 ### **📝 Step 1: Download the Ridian Plugin Files**
 
