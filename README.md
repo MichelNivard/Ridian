@@ -14,13 +14,13 @@ Displays variables in the current environment for transparent coding:
 
 https://github.com/user-attachments/assets/6e21cee6-f287-4319-9cd9-6c152d8b2320
 
-## GEt help when coding:
+## Get help when coding:
 
 Displays help pages for R packages:
 
 https://github.com/user-attachments/assets/d2f58b8a-5967-4227-a5f4-d4e263670875
 
-## Unlock R's ploting:
+## Unlock R's plotting:
 
 Inline R plots in your notes:
 
