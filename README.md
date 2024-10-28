@@ -5,7 +5,15 @@
 
 ## This is Ridian, _**R**_ in Obs _**idian**_
 
-Run R code in obsidian (cnd-r/cntrol-r to run a code chunk) and more.
+Run R code in obsidian (cnd-r/cntrol-r to run a code chunk) and more. This is a somewhat ambitious project to make R a first class citizen of the Obsidian Universe.
+
+
+
+> [!WARNING]
+> **EXTREMELY EARLY DEVELOPERS RELEASE, DO NOT USE ON YOUR PRECIOUS VAULT, SET UP A SEPERATE DEV-VAULT, OR COPY OF YOUR VAULT TO PLAY WITH THIS!!!**
+
+
+
 
 
 **What this is:**
