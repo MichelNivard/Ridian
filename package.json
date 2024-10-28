@@ -1,5 +1,5 @@
 {
-	"name": "Ridian",
+	"name": "ridian",
 	"version": "0.0.1",
 	"description": "Execute R code blocks and display outputs and plots within Obsidian.",
 	"main": "main.js",
