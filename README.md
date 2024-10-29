@@ -14,6 +14,9 @@
 
 Run R code in obsidian (cmd-R/cntrol-R to run a code chunk) and more. This is a somewhat ambitious project to **make R a first class citizen of the Obsidian Universe**.
 
+Dependecies: In R/Rstudio Install: evlaute;josnlite;htmlwidgets packages
+
+
 **What this is:**
 
 - A way to run R code in Obsidian
@@ -23,7 +26,10 @@ Run R code in obsidian (cmd-R/cntrol-R to run a code chunk) and more. This is a 
 
 **What I want to add:**
 
--  Quarto/Rmarkdown export: a way to export notes with r code to .Rmd or .Qmd compliant files
+-  Quarto/RMarkdown export: a way to export notes with r code to .Rmd or .Qmd compliant files
+-  Full Quarto compliant code chunk processing (allows for seamless transition to other editors)
+-  Code auto-complete;
+-  package installers
 
 
 **What this won't be:**
@@ -131,6 +137,14 @@ Here's a step-by-step guide to installing your Obsidian plugin, **Ridian**, usin
 ---
 
 ### Step 5: Set Path to R instalation & pandoc installation
+
+In R/Rstudio Install:
+
+```r
+library(evaluate)
+library(jsonlite)
+library(htmlwidgets)
+```
 
 In the **Ridian** settings provide the path to your R installation, which can for example be:
    Mac: /usr/local/bin/R
