@@ -142,9 +142,9 @@ R package Dependecies: In R/Rstudio Install: `evaluate`, `jsonlite` & `htmlwidge
 In R/Rstudio Install:
 
 ```r
-library(evaluate)
-library(jsonlite)
-library(htmlwidgets)
+install.packages(evaluate)
+install.packages(jsonlite)
+install.packages(htmlwidgets)
 ```
 
 In the **Ridian** settings provide the path to your R installation, which can for example be:
