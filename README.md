@@ -6,13 +6,13 @@
 ## This is Ridian, _**R**_ in Obs _**idian**_
 
 > [!WARNING]
-> **BETA RELEASE, DON't ON YOUR MAIN VAULT**
+> **BETA release, wouldn't use on your precious main vault innitially**
 >
 > 1. Only confirmed to work on MacOS on my mackbook & on Win 11's (on my macbook)
 > 2. No tests and other development necessities implemented
-> 3. No Contribution guilines
+> 3. No Contribution guilines (but help wanted!)
 >
-> 
+
 
 
 
