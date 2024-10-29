@@ -7,14 +7,7 @@
 
 > [!WARNING]
 > **BETA release, wouldn't use on your precious main vault innitially**
->
-> 1. Only confirmed to work on MacOS on my mackbook & on Win 11's (on my macbook)
-> 2. No tests and other development necessities implemented
-> 3. No Contribution guilines (but help wanted!)
->
-
-
-
+> check: Known Issues/To-Do below to ensure there arent any dealbreakers.
 
 Run R code in obsidian (cnd-r/cntrol-r to run a code chunk) and more. This is a somewhat ambitious project to make R a first class citizen of the Obsidian Universe.
 
@@ -63,6 +56,15 @@ https://github.com/user-attachments/assets/e65af175-5fa8-4813-bf49-01997574a268
 ## Disclosures and Issues:
 
 
+> [!WARNING]
+> **BETA release, wouldn't use on your precious main vault innitially**
+>
+> 1. Only confirmed to work on MacOS on my mackbook & on Win 11's (on my macbook)
+> 2. No tests and other development necessities implemented
+> 3. No Contribution guilines (but help wanted!)
+>
+
+
 > [!NOTE]
 >
 > Seculity Disclosures:
@@ -72,10 +74,12 @@ https://github.com/user-attachments/assets/e65af175-5fa8-4813-bf49-01997574a268
 
 
 > [!NOTE]
-> Known Issues:
+> Known Issues/To-Do:
 > 1. uses absolute paths for htmlwidgets
 > 2. Every note spins up an R process, if you do this for many notes you'll overwhlm memory
-> 3. Only tested on my personal macbook 
+> 3. Only confirmed to work on MacOS on my mackbook & on Win 11's (on my macbook)
+> 4. No tests and other development necessities implemented
+> 5. No Contribution guilines (but help wanted!)
 
 
 
@@ -123,9 +127,15 @@ Here's a step-by-step guide to installing your Obsidian plugin, **Ridian**, usin
 
 ---
 
-### Step 5: Updates
+### Step 5: Set Path to R instalation & pandoc installation
 
-BRAT will manage updates for Ridian as the developer releases new versions, ensuring you always have the latest version without manually reinstalling.
+In the **Ridian** settings provide the path to your R installation, which can for example be:
+   Mac: /usr/local/bin/R
+   Windows: C:\Program Files (x86)\R\R-4.4.1\bin\R.exe
+
+After you set the path Ridian will adjust it for internal use (it might look different if you revisit the plugin.
+
+Install pandoc (https://pandoc.org) and point **Ridian** to your pandoc install if you want to use **htmlwidgets** in R.
 
 ---
 
