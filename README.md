@@ -14,8 +14,6 @@
 
 Run R code in obsidian (cmd-R/cntrol-R to run a code chunk) and more. This is a somewhat ambitious project to **make R a first class citizen of the Obsidian Universe**.
 
-Dependecies: In R/Rstudio Install: evlaute;josnlite;htmlwidgets packages
-
 
 **What this is:**
 
@@ -95,6 +93,9 @@ https://github.com/user-attachments/assets/e65af175-5fa8-4813-bf49-01997574a268
 ## **📥 Ridian: Manual Installation Guide for Obsidian**
 
 Here's a step-by-step guide to installing your Obsidian plugin, **Ridian**, using the BRAT (Beta Reviewers Auto-update Tool) plugin. This guide assumes you have Obsidian and BRAT already installed.
+
+
+R package Dependecies: In R/Rstudio Install: `evaluate`, `jsonlite` & `htmlwidgets` packages.
 
 ---
 
