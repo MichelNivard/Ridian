@@ -7,9 +7,12 @@
 
 > [!WARNING]
 > **BETA release, wouldn't use on your precious main vault innitially**
+>
+> Code potentially unstable and executes R code outside your vault, only ever execute code you trust!
+> 
 > check: Known Issues/To-Do below to ensure there arent any dealbreakers.
 
-Run R code in obsidian (cnd-r/cntrol-r to run a code chunk) and more. This is a somewhat ambitious project to make R a first class citizen of the Obsidian Universe.
+Run R code in obsidian (cmd-R/cntrol-R to run a code chunk) and more. This is a somewhat ambitious project to **make R a first class citizen of the Obsidian Universe**.
 
 **What this is:**
 
