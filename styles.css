@@ -15,8 +15,6 @@ margin-right: auto;
 }
 
 
-
-
 .r-run-button {
   position: absolute;
   top: 5px;
@@ -41,14 +39,6 @@ margin-right: auto;
 /* Custom Styling for OUTPUT Callout */
 @import url('https://fonts.googleapis.com/css?family=Fira+Mono');
 
-.cm.callout {
-    width: 800px;
-    max-width: 800px; !important
-}
-.callout {
-    width: 800px;
-    max-width: 800px; !important
-}
 
 .callout[data-callout="output"] {
   background-color: var(--background-primary);
