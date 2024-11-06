@@ -16,7 +16,7 @@ import {
   WorkspaceLeaf,
   PluginSettingTab, // Added
   Setting,          // Added
-  TextComponent,
+  FileSystemAdapter,
 } from 'obsidian';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import * as fs from 'fs';
@@ -38,12 +38,14 @@ const VIEW_TYPE_R_HELP = 'r-help-view';
 interface MyPluginSettings {
   rExecutablePath: string;
   rstudioPandocPath: string; // New property
+  quartoExecutablePath: string; // Add this line
 }
 
 // Define default settings
 const DEFAULT_SETTINGS: MyPluginSettings = {
   rExecutablePath: '/usr/local/bin/R', // Default path to R executable
   rstudioPandocPath: '/opt/homebrew/bin/', // OS-specific default path
+  quartoExecutablePath: '/usr/local/bin/quarto',
 };
 
 // Create the REnvironmentView class
@@ -235,8 +237,6 @@ class REnvironmentView extends ItemView {
     document.head.appendChild(style);
   }
 }
-
-
 // Add this new class after REnvironmentView class
 
 class RHelpView extends ItemView {
@@ -322,49 +322,69 @@ class MyPluginSettingTab extends PluginSettingTab {
 
     containerEl.createEl('h2', { text: 'R Integration Settings' });
 
-    new Setting(containerEl)
-      .setName('Path to R Executable')
-      .setDesc('Specify the full path to your R executable.')
-      .addText((text) =>
-        text
-          .setPlaceholder('/usr/local/bin/R')
-          .setValue(this.plugin.settings.rExecutablePath)
-          .onChange(async (value: string) => { // Added type annotation
-            const trimmedValue = value.trim();
-            console.log('R Executable Path changed to: ' + trimmedValue);
-            // Validate the path
-            if (fs.existsSync(trimmedValue) && fs.statSync(trimmedValue).isFile()) {
-              this.plugin.settings.rExecutablePath = trimmedValue;
-              await this.plugin.saveSettings();
-              new Notice('R executable path updated successfully.');
-            } else {
-              new Notice('Invalid R executable path. Please enter a valid path.');
-              console.error('Invalid R executable path provided:', trimmedValue);
-            }
-          })
-      );
+// Function to process path for Windows compatibility with type annotation
+function formatPathForWindows(path: string): string {
+  if (navigator.platform.includes('Win')) {
+    // First, replace all single backslashes with double backslashes
+    // Then, replace all forward slashes with double backslashes
+    return path.replace(/\\/g, '\\\\').replace(/\//g, '\\\\');
+  }
+  return path;
+}
 
-      new Setting(containerEl)
-      .setName('Path to RStudio Pandoc')
-      .setDesc('Specify the full path to your RStudio Pandoc installation.')
-      .addText((text: TextComponent) => // Added type annotation
-        text
-          .setPlaceholder('/opt/homebrew/bin/')
-          .setValue(this.plugin.settings.rstudioPandocPath)
-          .onChange(async (value: string) => { // Added type annotation
-            const trimmedValue = value.trim();
-            console.log('RStudio Pandoc Path changed to: ' + trimmedValue);
-            // Validate the path
-            if (fs.existsSync(trimmedValue) && fs.statSync(trimmedValue).isDirectory()) {
-              this.plugin.settings.rstudioPandocPath = trimmedValue;
-              await this.plugin.saveSettings();
-              new Notice('RStudio Pandoc path updated successfully.');
-            } else {
-              new Notice('Invalid RStudio Pandoc path. Please enter a valid directory path.');
-              console.error('Invalid RStudio Pandoc path provided:', trimmedValue);
-            }
-          })
-      );
+
+// Setting for R Executable Path
+new Setting(containerEl)
+  .setName('Path to R Executable')
+  .setDesc('Specify the full path to your R executable.')
+  .addText((text) =>
+    text
+       .setPlaceholder('/usr/local/bin/R')
+      .setValue(formatPathForWindows(this.plugin.settings.rExecutablePath))
+      .onChange(async (value) => {
+        const formattedValue = formatPathForWindows(value.trim());
+        console.log('R Executable Path changed to: ' + formattedValue);
+        
+        this.plugin.settings.rExecutablePath = formattedValue;
+        await this.plugin.saveSettings();
+        new Notice('R executable path updated successfully.');
+      })
+  );
+
+// Setting for RStudio Pandoc Path
+new Setting(containerEl)
+  .setName('Path to RStudio Pandoc')
+  .setDesc('Specify the full path to your RStudio Pandoc installation.')
+  .addText((text) =>
+    text
+      .setPlaceholder('/opt/homebrew/bin/')
+      .setValue(formatPathForWindows(this.plugin.settings.rstudioPandocPath))
+      .onChange(async (value) => {
+        const formattedValue = formatPathForWindows(value.trim());
+        console.log('RStudio Pandoc Path changed to: ' + formattedValue);
+        
+        this.plugin.settings.rstudioPandocPath = formattedValue;
+        await this.plugin.saveSettings();
+        new Notice('RStudio Pandoc path updated successfully.');
+      })
+  );
+
+  // Setting for Quarto Executable Path
+  new Setting(containerEl)
+  .setName('Quarto Executable Path')
+  .setDesc('Specify the full path to your Quarto executable. Example: /usr/local/bin/quarto')
+  .addText((text) =>
+    text
+      .setPlaceholder('/usr/local/bin/quarto')
+      .setValue(this.plugin.settings.quartoExecutablePath)
+      .onChange(async (value) => {
+        console.log('Quarto Executable Path changed to: ' + value);
+        this.plugin.settings.quartoExecutablePath = value.trim();
+        await this.plugin.saveSettings();
+        new Notice('Quarto executable path updated successfully.');
+      })
+  );
+
   }
 
 
@@ -477,6 +497,14 @@ if (this.app.workspace.getLeavesOfType(VIEW_TYPE_R_HELP).length === 0) {
         },
       ],
     });
+
+    this.addCommand({
+      id: 'export-note-with-quarto',
+      name: 'Export Note with Quarto',
+      callback: () => this.exportNoteWithQuarto(),
+    });
+    
+
   
     console.log('R Code Evaluator Plugin loaded successfully');
   }
@@ -501,115 +529,284 @@ if (this.app.workspace.getLeavesOfType(VIEW_TYPE_R_HELP).length === 0) {
     console.log('R Code Evaluator Plugin unloaded successfully');
   }
 
-  // Run code chunk in editing mode
-  runCurrentCodeChunk(editor: Editor, view: MarkdownView, noteTitle: string) {
-    const cursor = editor.getCursor();
-    const { startLine, endLine, code, existingLabel } = this.getCurrentCodeChunk(editor, cursor.line);
-  
-    if (code) {
-      const uniqueId = existingLabel || this.generateUniqueId(startLine); // Use existing label or generate new based on position
-      const notePath = view.file?.path;
-      if (notePath) {
-        if (!existingLabel) {
-          // Insert the generated label into the code chunk
-          this.insertLabel(editor, startLine, uniqueId);
-        }
-  
-        console.log(`Running current code chunk in note: ${notePath} with ID: ${uniqueId}`);
-  
-        // Updated regular expressions to detect help requests anywhere in the code
-          const isHelpRequest =
-          /\?\s*\w+/.test(code) ||        // Detects patterns like "?functionName"
-          /help\s*\(\s*\w+\s*\)/.test(code); // Detects patterns like "help(functionName)"
-            
-        this.runRCodeInSession(notePath, code, noteTitle, uniqueId, isHelpRequest) // Pass the flag
-          .then(({ result, imagePaths, widgetPaths, helpContent }) => {
-            console.log('R code executed successfully');
-  
-            if (isHelpRequest) {
-              // Help content is already handled inside runRCodeInSession
-              new Notice('Help content updated in the sidebar.');
-            } else {
-              // Insert output and images into the editor
-              this.insertOutputWithCallout(editor, endLine, result, imagePaths, widgetPaths, uniqueId);
-            }
-          })
-          .catch((err) => {
-            console.error('Error executing R code:', err);
-            this.insertOutputWithCallout(editor, endLine, `Error:\n${err}`, [], [], uniqueId);
-          });
-      } else {
-        new Notice('No file associated with the current view.');
-        console.error('No file associated with the current view.');
+// Run code chunk in editing mode
+runCurrentCodeChunk(editor: Editor, view: MarkdownView, noteTitle: string) {
+  const cursor = editor.getCursor();
+  const { startLine, endLine: originalEndLine, code, existingLabel, options } = this.getCurrentCodeChunk(editor, cursor.line);
+
+  let endLine = originalEndLine; // We'll adjust this if necessary
+
+  if (code) {
+    const uniqueId = existingLabel || this.generateUniqueId(startLine); // Use existing label or generate new based on position
+    const notePath = view.file?.path;
+    if (notePath) {
+      if (!existingLabel) {
+        // Insert the generated label into the code chunk
+        const linesInserted = this.insertLabel(editor, startLine, uniqueId);
+        // Adjust endLine since we've inserted new lines
+        endLine += linesInserted;
       }
+
+      console.log(`Running current code chunk in note: ${notePath} with ID: ${uniqueId}`);
+
+      // Determine if it's a help request
+      const isHelpRequest =
+        /\?\s*\w+/.test(code) ||        // Detects patterns like "?functionName"
+        /help\s*\(\s*\w+\s*\)/.test(code); // Detects patterns like "help(functionName)"
+
+      this.runRCodeInSession(notePath, code, noteTitle, uniqueId, isHelpRequest, options) // Pass the options
+        .then(({ result, imagePaths, widgetPaths, helpContent }) => {
+          console.log('R code executed successfully');
+
+          if (isHelpRequest) {
+            // Help content is already handled inside runRCodeInSession
+            new Notice('Help content updated in the sidebar.');
+          } else {
+            // Handle options
+            const includeOption = options['include'] == 'false';
+            const outputOption = options['output'] == 'false';
+          
+
+            
+              if (result || imagePaths.length > 0 || widgetPaths.length > 0) {
+                // Insert output and images into the editor if output is not suppressed and there's content
+                this.insertOutputWithCallout(editor, endLine, result, imagePaths, widgetPaths, uniqueId, options);
+              }
+              if(outputOption){
+                // Output is suppressed or there's no content
+                // Remove existing output callout if present
+                this.removeOutputCallout(editor, uniqueId);
+              }
+            
+              if (includeOption) {
+              // Include is false, remove existing output callout if present
+              this.removeOutputCallout(editor, uniqueId);
+            }
+            
+          }
+        })
+        .catch((err) => {
+          console.error('Error executing R code:', err);
+          // Check if errors should be included
+          if (options['error'] !== 'false' && options['include'] !== 'false' && options['output'] !== 'false') {
+            this.insertOutputWithCallout(editor, endLine, `Error:\n${err}`, [], [], uniqueId, options);
+          } else {
+            // Remove existing output callout if present
+            this.removeOutputCallout(editor, uniqueId);
+          }
+        });
     } else {
-      new Notice('No R code chunk found at the cursor position.');
-      console.log('No R code chunk found at the cursor position.');
+      new Notice('No file associated with the current view.');
+      console.error('No file associated with the current view.');
+    }
+  } else {
+    new Notice('No R code chunk found at the cursor position.');
+    console.log('No R code chunk found at the cursor position.');
+  }
+}
+
+
+
+// Get the current code chunk based on cursor position
+getCurrentCodeChunk(
+  editor: Editor,
+  cursorLine: number
+): {
+  startLine: number;
+  endLine: number;
+  code: string;
+  existingLabel: string | null;
+  options: { [key: string]: string };
+} {
+  const totalLines = editor.lineCount();
+  let startLine = cursorLine;
+  let endLine = cursorLine;
+  let existingLabel: string | null = null;
+  let options: { [key: string]: string } = {};
+
+  // Find the start of the code chunk
+  while (startLine >= 0 && !this.isCodeChunkStart(editor.getLine(startLine))) {
+    startLine--;
+  }
+
+  // If not found, return invalid
+  if (startLine < 0) {
+    return { startLine: -1, endLine: -1, code: '', existingLabel: null, options: {} };
+  }
+
+  // Find the end of the code chunk
+  endLine = startLine + 1;
+  while (endLine < totalLines && !editor.getLine(endLine).startsWith('```')) {
+    endLine++;
+  }
+
+  if (endLine >= totalLines) {
+    // No closing ```
+    return { startLine: -1, endLine: -1, code: '', existingLabel: null, options: {} };
+  }
+
+  // Parse the label and options from the code chunk
+  existingLabel = this.parseChunkLabel(editor, startLine);
+  options = this.parseChunkOptions(editor, startLine);
+
+  // Extract the code chunk content, skipping options lines
+  const codeLines = [];
+  for (let i = startLine + 1; i < endLine; i++) {
+    const line = editor.getLine(i);
+    // Skip lines starting with '#|' as they are options
+    if (!line.trim().startsWith('#|')) {
+      codeLines.push(line);
     }
   }
-  
+  const code = codeLines.join('\n');
 
-  // Get the current code chunk based on cursor position
-  getCurrentCodeChunk(
-    editor: Editor,
-    cursorLine: number
-  ): { startLine: number; endLine: number; code: string; existingLabel: string | null } {
+  console.log(`Found code chunk from line ${startLine} to ${endLine} with label: ${existingLabel}`);
+  return { startLine, endLine, code, existingLabel, options };
+}
+
+// Helper method to check if a line is the start of a code chunk
+isCodeChunkStart(line: string): boolean {
+  // Remove leading whitespace
+  line = line.trim();
+  // Match lines that start with ```r or ```{r}
+  return /^```{?r/.test(line);
+}
+
+
+// Helper method to parse options from the code chunk
+parseChunkOptions(editor: Editor, startLine: number): { [key: string]: string } {
+  const options: { [key: string]: string } = {};
+  let lineIndex = startLine + 1;
+  const totalLines = editor.lineCount();
+
+  while (lineIndex < totalLines) {
+    const line = editor.getLine(lineIndex).trim();
+    if (line.startsWith('#|')) {
+      // Extract the option key and value
+      const optionMatch = line.match(/^#\|\s*(\w+)\s*:\s*(.*)$/);
+      if (optionMatch) {
+        const key = optionMatch[1];
+        let value = optionMatch[2];
+
+        // Remove surrounding quotes if present
+        value = value.replace(/^["']|["']$/g, '');
+
+        options[key] = value;
+      }
+      lineIndex++;
+    } else if (line === '' || line.startsWith('#')) {
+      // Skip empty lines or comments
+      lineIndex++;
+    } else {
+      // Reached the end of options
+      break;
+    }
+  }
+
+  return options;
+}
+
+
+// Helper method to parse the label from the code chunk options
+parseChunkLabel(editor: Editor, startLine: number): string | null {
+  const fenceLine = editor.getLine(startLine).trim();
+
+  // Check if Quarto code chunk with options in comments
+  if (fenceLine.startsWith('```{r')) {
+    let lineIndex = startLine + 1;
     const totalLines = editor.lineCount();
-    let startLine = cursorLine;
-    let endLine = cursorLine;
-    let existingLabel: string | null = null;
 
-    // Find the start of the code chunk
-    while (startLine >= 0 && !editor.getLine(startLine).startsWith('```r')) {
-      startLine--;
+    while (lineIndex < totalLines) {
+      const line = editor.getLine(lineIndex).trim();
+      if (line.startsWith('#|')) {
+        // Extract the option key and value
+        const optionMatch = line.match(/^#\|\s*(\w+)\s*:\s*(.*)$/);
+        if (optionMatch) {
+          const key = optionMatch[1];
+          let value = optionMatch[2];
+
+          // Remove surrounding quotes if present
+          value = value.replace(/^["']|["']$/g, '');
+
+          if (key === 'label') {
+            return value;
+          }
+        }
+        lineIndex++;
+      } else if (line === '' || line.startsWith('#')) {
+        // Skip empty lines or comments
+        lineIndex++;
+      } else {
+        // Reached the end of options
+        break;
+      }
     }
-
-    // If not found, return invalid
-    if (startLine < 0) {
-      return { startLine: -1, endLine: -1, code: '', existingLabel: null };
-    }
-
-    // Find the end of the code chunk
-    endLine = startLine + 1;
-    while (endLine < totalLines && !editor.getLine(endLine).startsWith('```')) {
-      endLine++;
-    }
-
-    if (endLine >= totalLines) {
-      // No closing ```
-      return { startLine: -1, endLine: -1, code: '', existingLabel: null };
-    }
-
-    // Extract the code chunk content
-    const codeLines = [];
-    for (let i = startLine + 1; i < endLine; i++) {
-      codeLines.push(editor.getLine(i));
-    }
-    const code = codeLines.join('\n');
-
-    // Check for existing label in the code chunk fence line, e.g., ```r {#label}
-    const fenceLine = editor.getLine(startLine);
-    const labelMatch = fenceLine.match(/\{#([^\}]+)\}/);
-    if (labelMatch) {
-      existingLabel = labelMatch[1];
-    }
-
-    console.log(`Found code chunk from line ${startLine} to ${endLine} with label: ${existingLabel}`);
-    return { startLine, endLine, code, existingLabel };
   }
 
-  // Insert the generated label into the code chunk
-  insertLabel(editor: Editor, startLine: number, uniqueId: string) {
-    const fenceLine = editor.getLine(startLine);
-    if (fenceLine.includes('{#')) {
-      // Already has a label, do not insert
-      return;
+  // Check for R Markdown style label inside braces
+  const labelMatch = fenceLine.match(/\{.*(#[^\s\}]+).*\}/);
+  if (labelMatch) {
+    const label = labelMatch[1].substring(1); // Remove the '#' character
+    return label;
+  }
+
+  return null;
+}
+
+// Insert the generated label into the code chunk
+insertLabel(editor: Editor, startLine: number, uniqueId: string): number {
+  const fenceLine = editor.getLine(startLine).trim();
+  const isQuartoChunk = fenceLine.startsWith('```{r');
+
+  if (isQuartoChunk) {
+    // Insert label into Quarto chunk options as a `#| label: ...` line
+    let insertPosition = startLine + 1;
+    const totalLines = editor.lineCount();
+
+    // Find the position after existing `#|` options
+    while (insertPosition < totalLines) {
+      const line = editor.getLine(insertPosition).trim();
+      if (line.startsWith('#|')) {
+        insertPosition++;
+      } else {
+        break;
+      }
     }
-    // Insert the label at the end of the fence line
-    const newFenceLine = fenceLine.replace(/```r/, `\`\`\`r {#${uniqueId}}`);
+
+    // Insert the label option
+    editor.replaceRange(`#| label: ${uniqueId}\n`, { line: insertPosition, ch: 0 });
+    console.log(`Inserted label "#| label: ${uniqueId}" into code chunk at line ${insertPosition}`);
+    return 1; // We inserted one line
+  } else {
+    // Insert label into R Markdown chunk options inside the braces
+    const match = fenceLine.match(/^(```{r)(.*)(})?$/);
+    if (!match) {
+      // Not a valid code chunk start line
+      return 0; // Return 0 since no lines were inserted
+    }
+
+    const start = match[1]; // '```{r'
+    const options = match[2] || ''; // existing options
+    const end = match[3] ? '}' : ''; // closing '}'
+
+    // Append label option
+    let newOptions;
+    if (options.trim() === '') {
+      newOptions = ` {#${uniqueId}}`;
+    } else {
+      newOptions = options + ` {#${uniqueId}}`;
+    }
+
+    // Reconstruct the fence line
+    const newFenceLine = `${start}${newOptions}${end || '}'}`;
+
     editor.setLine(startLine, newFenceLine);
-    console.log(`Inserted label {#${uniqueId}} into code chunk at line ${startLine}`);
+    console.log(`Inserted label "{#${uniqueId}}" into code chunk at line ${startLine}`);
+    return 0; // No new lines were inserted
   }
+}
+
+
 
 // Insert or replace the output callout with images
 insertOutputWithCallout(
@@ -618,36 +815,91 @@ insertOutputWithCallout(
   output: string,
   imagePaths: string[],
   widgetPaths: string[],
-  uniqueId: string
+  uniqueId: string,
+  options: { [key: string]: string } // Add this parameter
 ) {
   console.log('Inserting or updating output callout and images into the editor');
 
+
+
+ // Prepare the content lines
+ const contentLines: string[] = [];
+
+ // Prepare the output content, prefixing each line with '> '
+ if (output && output.trim() !== '') {
+   const outputLines = output.trim().split('\n').map((line) => '> ' + line);
+   contentLines.push(...outputLines);
+ }
+
+ // Add new image and animation links inside the callout
+ imagePaths.forEach((imagePath) => {
+   const vaultImagePath = `${imagePath}`; // Path in the vault
+   const imageMarkdown = `![center|480](${vaultImagePath})`;
+   contentLines.push(`> ${imageMarkdown}`);
+ });
+
+ widgetPaths.forEach((widgetPath) => {
+   const widgetMarkdown = `<iframe src="${widgetPath}" width="100%" height="680px"></iframe>`;
+   contentLines.push(`> ${widgetMarkdown}`);
+ });
+
+ // If there's no content, avoid inserting an empty callout
+ if (contentLines.length === 0) {
+   console.log('No output, images, or widgets to insert. Skipping callout insertion.');
+   return;
+ }
   // Define the callout block with unique ID
-  const calloutStart = `> [!OUTPUT]+ {#output-${uniqueId}}\n> \n`;
-  const calloutContentPrefix = '> '; // Each line of content should start with '> '
-  let outputContent = calloutStart;
+  let outputContent = `> [!OUTPUT]+ {#output-${uniqueId}}\n`;
 
-  // Prepare the output content, prefixing each line with '> '
-  const outputLines = output.trim().split('\n').map((line) => calloutContentPrefix + line);
-  outputContent += outputLines.join('\n');
-
-  // Add new image and animation links inside the callout
-  imagePaths.forEach((imagePath) => {
-    const vaultImagePath = `${imagePath}`; // Path in the vault
-    const imageMarkdown = `![center| 480 ](${vaultImagePath})`;
-    outputContent += `\n${calloutContentPrefix} ${imageMarkdown}`;
-  });
-  
-  widgetPaths.forEach((widgetPath) => {
-    const vaultWidgetPath = `${widgetPath}`; // Path in the vault
-    const widgetMarkdown = `<iframe src="${vaultWidgetPath}" width="100%" height="680px"></iframe>`;
-    outputContent += `\n${calloutContentPrefix} ${widgetMarkdown}`;
-  });
-
+  // Append content lines to the outputContent
+  outputContent += contentLines.join('\n') + '\n';
   // Ensure there's a newline after the callout content
-  outputContent += '\n> \n';
+  outputContent += '> \n';
 
-  // Read the current content to check for existing output
+
+ // Read the current content to check for existing output
+ let existingOutputStart = -1;
+ let existingOutputEnd = -1;
+ const totalLines = editor.lineCount();
+
+ for (let i = 0; i < totalLines; i++) {
+   const line = editor.getLine(i);
+   if (line.trim() === `> [!OUTPUT]+ {#output-${uniqueId}}`) {
+     existingOutputStart = i;
+     // Find the end of the callout block
+     existingOutputEnd = i;
+     while (existingOutputEnd + 1 < totalLines) {
+       const nextLine = editor.getLine(existingOutputEnd + 1);
+       // Check if the next line is part of the callout
+       if (!nextLine.startsWith('> ') && nextLine.trim() !== '') {
+         break;
+       }
+       existingOutputEnd++;
+     }
+     break;
+   }
+ }
+
+ if (existingOutputStart !== -1 && existingOutputEnd !== -1) {
+   // Replace the existing callout block
+   const from = { line: existingOutputStart, ch: 0 };
+   const to = { line: existingOutputEnd + 1, ch: 0 };
+   editor.replaceRange(outputContent + '\n', from, to);
+   console.log(`Replaced existing output callout for ID: ${uniqueId}`);
+ } else {
+   // Insert the new callout block after the code chunk
+   const insertPosition = { line: endLine + 1, ch: 0 };
+   // Insert a leading newline to separate from the code chunk
+   editor.replaceRange('\n' + outputContent + '\n', insertPosition);
+   console.log(`Inserted new output callout for ID: ${uniqueId}`);
+ }
+}
+
+// Remove the output callout with the given unique ID
+removeOutputCallout(editor: Editor, uniqueId: string) {
+  console.log(`Removing output callout for ID: ${uniqueId} if it exists`);
+
+  // Find the existing callout
   let existingOutputStart = -1;
   let existingOutputEnd = -1;
   const totalLines = editor.lineCount();
@@ -671,20 +923,15 @@ insertOutputWithCallout(
   }
 
   if (existingOutputStart !== -1 && existingOutputEnd !== -1) {
-    // Replace the existing callout block
+    // Remove the existing callout block
     const from = { line: existingOutputStart, ch: 0 };
     const to = { line: existingOutputEnd + 1, ch: 0 };
-    editor.replaceRange(outputContent + '\n', from, to);
-    console.log(`Replaced existing output callout for ID: ${uniqueId}`);
+    editor.replaceRange('', from, to);
+    console.log(`Removed existing output callout for ID: ${uniqueId}`);
   } else {
-    // Insert the new callout block after the code chunk
-    const insertPosition = { line: endLine + 1, ch: 0 };
-    // Insert a leading newline to separate from the code chunk
-    editor.replaceRange('\n' + outputContent + '\n', insertPosition);
-    console.log(`Inserted new output callout for ID: ${uniqueId}`);
+    console.log(`No existing output callout found for ID: ${uniqueId}`);
   }
 }
-
 
 
   // Get or create R process for the note
@@ -743,13 +990,14 @@ options(device = function(...) jpeg(filename = tempfile(), width=800, height=600
     return rProcess;
   }
 
-    async runRCodeInSession(
-      notePath: string,
-      code: string,
-      noteTitle: string,
-      uniqueId: string,
-      isHelpRequest: boolean // New parameter
-    ): Promise<{ result: string; imagePaths: string[]; widgetPaths: string[]; helpContent: string }> {
+  async runRCodeInSession(
+    notePath: string,
+    code: string,
+    noteTitle: string,
+    uniqueId: string,
+    isHelpRequest: boolean,
+    options: { [key: string]: string } // New parameter
+  ): Promise<{ result: string; imagePaths: string[]; widgetPaths: string[]; helpContent: string }> {
   
   
     
@@ -762,18 +1010,37 @@ options(device = function(...) jpeg(filename = tempfile(), width=800, height=600
 
       // Create a temporary directory for R to output plots
       const tempDir = await mkdtempAsync(path.join(os.tmpdir(), 'rplots-'));
-      const tempDirEscaped = tempDir.replace(/\\/g, '/'); // Ensure forward slashes
+      // const tempDirEscaped = tempDir.replace(/\\/g, '/'); // Ensure forward slashes
+
+      const tempDirEscaped = process.platform === 'win32' 
+      ? tempDir.replace(/\\/g, '\\\\') 
+      :tempDir.replace(/\\/g, '/');
+
     
       // Generate a temp file path for the help content
       const tempHelpFilePath = path.join(tempDirEscaped, `help_${uniqueId}.txt`);
-      const tempHelpFilePathR = tempHelpFilePath.replace(/\\/g, '/');
+      //const tempHelpFilePathR = tempHelpFilePath.replace(/\\/g, '/');
+
+      const tempHelpFilePathR = process.platform === 'win32' 
+      ? tempHelpFilePath.replace(/\\/g, '\\\\') 
+      :tempHelpFilePath .replace(/\\/g, '/');
+
+
 
       const marker = `__END_OF_OUTPUT__${Date.now()}__`;
       const imageMarker = `__PLOT_PATH__`;
       const envMarker = `__ENVIRONMENT_DATA__${Date.now()}__`;
       const widgetMarker = `__WIDGET_PATH__`; // Define the widget marker
 
-      
+      const optsCode = `
+      opts <- list(
+        echo = ${options['echo'] !== 'false' ? 'TRUE' : 'FALSE'},
+        warning = ${options['warning'] !== 'false' ? 'TRUE' : 'FALSE'},
+        error = ${options['error'] !== 'false' ? 'TRUE' : 'FALSE'},
+        include = ${options['include'] !== 'false' ? 'TRUE' : 'FALSE'},
+        output = ${options['output'] !== 'false' ? 'TRUE' : 'FALSE'}
+      )
+      `;
 
       // Prepare code to send to R using the 'evaluate' package
       const wrappedCode = `
@@ -781,6 +1048,9 @@ library(evaluate)
 library(jsonlite)
 library(htmlwidgets)
 Sys.setenv(RSTUDIO_PANDOC='${this.settings.rstudioPandocPath}')
+
+
+${optsCode}
 
 # Define our custom print function
 custom_print_htmlwidget <- function(x, ..., viewer = NULL) {
@@ -881,7 +1151,7 @@ print.help_files_with_topic <- function(x, ...)
     
     if(type == "text") {
       pkgname <- basename(dirname(dirname(file)))
-      tools::Rd2HTML(.getHelpFile(file), out = "${tempHelpFilePath}",
+      tools::Rd2HTML(.getHelpFile(file), out = "${tempHelpFilePathR}",
                             package = pkgname)
 
     }
@@ -907,56 +1177,61 @@ for (res in results) {
   if (inherits(res, "source")) {
     # Ignore source elements
   } else if (inherits(res, "warning")) {
-    outputs <- c(outputs, paste("Warning:", conditionMessage(res)))
+    if (opts$warning && opts$include) {
+      outputs <- c(outputs, paste("Warning:", conditionMessage(res)))
+    }
   } else if (inherits(res, "message")) {
-    outputs <- c(outputs, conditionMessage(res))
+    if (opts$output && opts$include) {
+      outputs <- c(outputs, res$message)
+    }
   } else if (inherits(res, "error")) {
-    outputs <- c(outputs, paste("Error:", conditionMessage(res)))
+    if (opts$error && opts$include) {
+      outputs <- c(outputs, paste("Error:", conditionMessage(res)))
+    }
   } else if (inherits(res, "character")) {
-
-      val_str <- res
-      outputs <- c(outputs, val_str)
-
+    if (opts$output && opts$include) {
+      outputs <- c(outputs, res)
+    }
   } else if (inherits(res, "recordedplot")) {
-    # Save the plot to a file using uniqueId
-    timestamp <- format(Sys.time(), "%Y%m%d%H%M%S")
-    plotFileName <- paste0("plot_${uniqueId}_", length(imagePaths) + 1, "_", timestamp, ".jpg")
-    plotFilePath <- file.path("${tempDirEscaped}", plotFileName)
-    jpeg(filename=plotFilePath, width=800, height=600)
-    replayPlot(res)
-    dev.off()
-    imagePaths <- c(imagePaths, plotFileName)
+    if (opts$output && opts$include) {
+      # Save the plot to a file using uniqueId
+      timestamp <- format(Sys.time(), "%Y%m%d%H%M%S")
+      plotFileName <- paste0("plot_${uniqueId}_", length(imagePaths) + 1, "_", timestamp, ".jpg")
+      plotFilePath <- file.path("${tempDirEscaped}", plotFileName)
+      jpeg(filename=plotFilePath, width=800, height=600)
+      replayPlot(res)
+      dev.off()
+      imagePaths <- c(imagePaths, plotFileName)
+    }
+  }
+}
+
+# Attempt to retrieve the last animation, if any
+if (opts$output && opts$include) {
+  if (requireNamespace("gganimate", quietly = TRUE)) {
+    anim <- try(gganimate::last_animation(), silent = TRUE)
+    if (is.character(anim[1])) {
+      if (file.info(anim[1])$mtime > timecheck) {
+        timestamp <- format(Sys.time(), "%Y%m%d%H%M%S")
+        animFileName <- paste0("animation_${uniqueId}_", timestamp, ".gif")
+        animFilePath <- file.path("${tempDirEscaped}", animFileName)
+        file.copy(anim[1], animFilePath)
+        imagePaths <- c(imagePaths, animFileName)
+      }
+    }
   }
 }
 
 # Output the collected outputs
-if (length(outputs) > 0) {
+if (opts$output && opts$include && length(outputs) > 0) {
   cat(paste(outputs, collapse = "\\n"), "\\n")
 }
 
-
-# Attempt to retrieve the last animation, if any
-if (requireNamespace("gganimate", quietly = TRUE)) {
-  anim <- try(gganimate::last_animation(), silent = TRUE)
-  
-  
-  
-    if (is.character(anim[1])) {
-    if(file.info(anim[1])$mtime > timecheck){
-    # 'anim' is a file path to the GIF
-    timestamp <- format(Sys.time(), "%Y%m%d%H%M%S")
-    animFileName <- paste0("animation_${uniqueId}_", timestamp, ".gif")
-    animFilePath <- file.path("${tempDirEscaped}", animFileName)  # Corrected line
-    file.copy(anim[1], animFilePath)
-    imagePaths <- c(imagePaths, animFileName)
-    }}
-    
-  
-}
-
 # Output image markers
-for (img in imagePaths) {
-  cat("${imageMarker}", img, "\\n", sep="")
+if (opts$output && opts$include) {
+  for (img in imagePaths) {
+    cat("${imageMarker}", img, "\\n", sep="")
+  }
 }
 
 # Output the environment data
@@ -1190,4 +1465,161 @@ for (const imageFileName of imagePaths) {
       console.log('Wrapped R code sent to the R process');
     });
   }
+
+  // Implement quarto export:
+
+
+  addFrontMatter(content: string, activeFile: TFile): string {
+  if (content.startsWith('---\n')) {
+    // Front matter already exists
+    return content;
+  } else {
+    const title = activeFile.basename;
+    const frontMatter = `---
+title: "${title}"
+author: "Author Name"
+date: today
+format: html
+---\n\n`;
+    return frontMatter + content;
+  }
 }
+
+sanitizeFileName(fileName: string): string {
+  // Replace spaces and other invalid characters with underscores
+  return fileName.replace(/[^a-zA-Z0-9-_]/g, '_');
+}
+
+
+stripOutputCallouts(content: string): string {
+  // Use a regular expression to match and remove output callouts
+  const outputCalloutRegex = /> \[!OUTPUT\]\+ {#output-[\w]+}\n(?:>.*\n)*>/gm;
+  return content.replace(outputCalloutRegex, '');
+}
+
+// save note to quarto 
+async savePreparedNote(content: string, originalFilePath: string): Promise<string> {
+  const baseName = path.basename(originalFilePath, '.md');
+  const sanitizedBaseName = this.sanitizeFileName(baseName);
+  const fileName = sanitizedBaseName + '_quarto.qmd'; // Use .qmd extension for Quarto
+
+  // Get the base path of the vault
+  let basePath: string;
+  const adapter = this.app.vault.adapter;
+
+  if (adapter instanceof FileSystemAdapter) {
+    basePath = adapter.getBasePath();
+  } else {
+    new Notice('Unable to determine vault base path. Export failed.');
+    throw new Error('Vault adapter is not a FileSystemAdapter.');
+  }
+
+  const exportFolderPath = path.join(basePath, 'Exports');
+
+  // Ensure the Exports folder exists
+  if (!fs.existsSync(exportFolderPath)) {
+    fs.mkdirSync(exportFolderPath);
+  }
+
+  const exportFilePath = path.join(exportFolderPath, fileName);
+
+  // Write the content to the export file
+  await fs.promises.writeFile(exportFilePath, content, 'utf8');
+
+  return exportFilePath;
+}
+
+async renderWithQuarto(exportFilePath: string) {
+  return new Promise<void>((resolve, reject) => {
+    const quartoExecutable = this.settings.quartoExecutablePath || 'quarto';
+
+    // Check if the Quarto executable exists
+    if (!fs.existsSync(quartoExecutable)) {
+      new Notice(`Quarto executable not found at ${quartoExecutable}. Please update the path in settings.`);
+      console.error(`Quarto executable not found at ${quartoExecutable}.`);
+      reject(new Error(`Quarto executable not found at ${quartoExecutable}.`));
+      return;
+    }
+
+    // Get R executable path from settings
+    const rExecutablePath = this.settings.rExecutablePath || 'Rscript';
+
+    // Set up environment variables
+    const env = { ...process.env };
+    env.QUARTO_R = rExecutablePath;
+
+    // Optional: Ensure Rscript is in PATH
+    const rscriptDir = path.dirname(rExecutablePath);
+    env.PATH = `${rscriptDir}${path.delimiter}${env.PATH}`;
+
+    // Spawn the Quarto render process with the updated environment
+    const renderProcess = spawn(
+      quartoExecutable,
+      ['render', exportFilePath],
+      { stdio: ['ignore', 'pipe', 'pipe'], env: env }
+    );
+
+    let stderrData = ''; // Variable to accumulate stderr output
+
+    // Capture stderr output
+    renderProcess.stderr.on('data', (data) => {
+      stderrData += data.toString();
+    });
+
+    renderProcess.on('error', (err) => {
+      new Notice('Failed to start Quarto rendering process.');
+      console.error(`Failed to start Quarto rendering process: ${err}`);
+      reject(err);
+    });
+
+    renderProcess.on('exit', (code, signal) => {
+      console.log(`Quarto render process exited with code: ${code}, signal: ${signal}`);
+      if (code === 0) {
+        new Notice('Quarto rendering completed successfully.');
+        resolve();
+      } else {
+        // Quarto exited with an error, present stderr output
+        console.error(`Quarto stderr: ${stderrData}`);
+        new Notice('Quarto rendering failed. Click for details.', 10000);
+        reject(new Error(`Quarto exited with code ${code}`));
+      }
+    });
+  });
+}
+
+
+// export note with quarto
+async exportNoteWithQuarto() {
+  const activeFile = this.app.workspace.getActiveFile();
+  if (!activeFile) {
+    new Notice('No active note to export.');
+    return;
+  }
+
+  try {
+    const originalContent = await this.app.vault.read(activeFile);
+    let content = originalContent;
+
+    // Add front matter
+    content = this.addFrontMatter(content, activeFile);
+
+    // Strip output callouts
+    content = this.stripOutputCallouts(content);
+
+    // Save the prepared note
+    const exportFilePath = await this.savePreparedNote(content, activeFile.path);
+
+    // Optionally, render with Quarto
+    await this.renderWithQuarto(exportFilePath);
+
+    // Open the rendered file or provide further instructions
+    new Notice('Note exported and rendered with Quarto successfully.');
+
+  } catch (err) {
+    console.error('Failed to export note with Quarto:', err);
+    new Notice('Failed to export note with Quarto.');
+  }
+}
+
+}
+
