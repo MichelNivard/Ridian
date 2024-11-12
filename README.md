@@ -35,7 +35,7 @@ Run R code in obsidian (cmd-R/cntrol-R to run a code chunk) and more. This is a 
 - An Rstudio replacement
 - An RMarkdown/Quarto repalacement
 
-- It wont cover most (very slight chance ill do python at some point) programming languages, here is an excelent optino for that: [execute code plugin](https://github.com/twibiral/obsidian-execute-code)
+- It wont cover other programming languages (5% chance of python), here is an excelent optino for that: [execute code plugin](https://github.com/twibiral/obsidian-execute-code)
 
 ## Ease coding by making R environment transparent:
 
