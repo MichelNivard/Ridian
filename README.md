@@ -3,22 +3,20 @@
 
 
 ## This is Ridian, _**R**_ in Obs _**idian**_
+
+R notebooks, and Quarto rendering fron Obsidian:
+
 ![image](https://github.com/user-attachments/assets/bf0c2809-e231-40d9-a047-e28c9d7a12c2)
 
 **What this is:**
 
 - A way to run R code in Obsidian
+- Full Quarto compliant code chunk processing (allows for seamless transition to other editors)
+- Parse a note and make it Quarto compliant, then render with Quarto
+  
 - A way to keep notes on Coding/Statistics with enbedded working example
 - A way to use Obsidians amazingsearch and links to link code snippets
 - A way to use R code snippets to add plots/widgets to your notes
-
-**What I want to add:**
-
--  Quarto/RMarkdown export: a way to export notes with r code to .Rmd or .Qmd compliant files
--  Full Quarto compliant code chunk processing (allows for seamless transition to other editors)
--  Code auto-complete;
--  package installers
-
 
 **What this won't be:**
 
@@ -53,14 +51,6 @@ https://github.com/user-attachments/assets/e65af175-5fa8-4813-bf49-01997574a268
 
 ## Disclosures and Issues:
 
-
-> [!WARNING]
-> **BETA release, wouldn't use on your precious main vault innitially**
->
-> 1. Only confirmed to work on MacOS on my mackbook & on Win 11's (on my macbook)
-> 2. No tests and other development necessities implemented
-> 3. No Contribution guilines (but help wanted!)
->
 
 
 > [!NOTE]
