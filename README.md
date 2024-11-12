@@ -25,28 +25,14 @@ R notebooks, and Quarto rendering fron Obsidian:
 
 - It wont cover other programming languages (5% chance of python), here is an excelent option for that: [execute code plugin](https://github.com/twibiral/obsidian-execute-code)
 
-## Ease coding by making R environment transparent:
+
+## Demo video:
 
 
-Displays variables in the current environment for transparent coding:
 
-https://github.com/user-attachments/assets/6e21cee6-f287-4319-9cd9-6c152d8b2320
+https://github.com/user-attachments/assets/4450185e-f5e1-477a-b952-7d08fd27e96d
 
-## Get help when coding:
 
-Displays help pages for R packages:
-
-https://github.com/user-attachments/assets/d2f58b8a-5967-4227-a5f4-d4e263670875
-
-## Unlock R's plotting:
-
-Inline R plots in your notes:
-
-https://github.com/user-attachments/assets/bb80a412-9616-4716-b5bc-37344e3f1996
-
-Inline htmlwidgets trough R:
-
-https://github.com/user-attachments/assets/e65af175-5fa8-4813-bf49-01997574a268
 
 
 ## Disclosures and Issues:
