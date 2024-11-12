@@ -29,12 +29,14 @@ R notebooks, and Quarto rendering fron Obsidian:
 ## Demo video:
 
 
-
-
 https://github.com/user-attachments/assets/07f4a935-b53a-429a-96e4-d6f21f3a483a
 
 
+## Demo render with Quarto
 
+
+
+https://github.com/user-attachments/assets/334f7af5-0e71-4b9f-9ac8-672a734c91d8
 
 
 ## Disclosures and Issues:
