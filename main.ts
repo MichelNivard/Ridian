@@ -1,22 +1,17 @@
-/**
- * R Code Evaluator Plugin for Obsidian
- * 
- * Licensed under the GNU GPL v3.0 License. See LICENSE file for details.
- */
-
-// At the top of your file
 import {
   App,
   Editor,
-  MarkdownView,
-  Notice,
   Plugin,
+  MarkdownView,
+  setIcon,
+  Notice,
   TFile,
   ItemView,
   WorkspaceLeaf,
-  PluginSettingTab, // Added
-  Setting,          // Added
+  PluginSettingTab,
+  Setting,
   FileSystemAdapter,
+  
 } from 'obsidian';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import * as fs from 'fs';
@@ -27,26 +22,221 @@ import { createHash } from 'crypto';
 import { pathToFileURL } from 'url';
 
 
+
+
 // Promisify fs functions
 const mkdtempAsync = promisify(fs.mkdtemp);
 
-// Define constants for the view types
+// Define constants for the R Code Evaluator
 const VIEW_TYPE_R_ENVIRONMENT = 'r-environment-view';
 const VIEW_TYPE_R_HELP = 'r-help-view';
 
+
+
+
 // Define the settings interface
-interface MyPluginSettings {
+interface CombinedPluginSettings {
   rExecutablePath: string;
-  rstudioPandocPath: string; // New property
-  quartoExecutablePath: string; // Add this line
+  rstudioPandocPath: string;
+  quartoExecutablePath: string;
+  enableFloatingMenu: boolean; // **Add this line**
+  // Add any additional settings from FloatingMenuPlugin if needed
 }
 
 // Define default settings
-const DEFAULT_SETTINGS: MyPluginSettings = {
-  rExecutablePath: '/usr/local/bin/R', // Default path to R executable
-  rstudioPandocPath: '/opt/homebrew/bin/', // OS-specific default path
+const DEFAULT_SETTINGS: CombinedPluginSettings = {
+  rExecutablePath: '/usr/local/bin/R',
+  rstudioPandocPath: '/opt/homebrew/bin/',
   quartoExecutablePath: '/usr/local/bin/quarto',
+  enableFloatingMenu: true, // **Add this line with a default value**
+  // Initialize additional settings if needed
 };
+
+// FloatingMenuPlugin functionality
+class FloatingMenu {
+  plugin: CombinedPlugin;
+  menuContainer: HTMLDivElement;
+
+  constructor(plugin: CombinedPlugin) {
+    this.plugin = plugin;
+  }
+ // onload for the menu.
+  onLoad() {
+    console.log('Loading Floating Menu Plugin');
+    this.addMenu();
+    // Register events to update the menu when the active leaf or layout changes
+    this.plugin.registerEvent(
+      this.plugin.app.workspace.on('active-leaf-change', () => {
+        console.log('Active leaf changed. Updating menu.');
+        this.addMenu();
+      })
+    );
+  
+    this.plugin.registerEvent(
+      this.plugin.app.workspace.on('layout-change', () => {
+        console.log('Layout changed. Updating menu.');
+        this.addMenu();
+      })
+          
+    
+    );
+
+    
+
+  }
+
+  onUnload() {
+    console.log('Unloading Floating Menu Plugin');
+
+    // Remove the menu container when the plugin is unloaded
+    if (this.menuContainer) {
+      this.menuContainer.remove();
+    }
+  }
+
+  
+
+  addMenu() {
+    // Remove existing menu if it exists to prevent duplicates
+    if (this.menuContainer) {
+      this.menuContainer.remove();
+    }
+
+
+    // Get the active markdown view
+    const activeView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!activeView) {
+      return;
+    }
+
+    // Get the editor's container element
+    const editorContainer = activeView.containerEl.querySelector('.cm-editor');
+    if (!editorContainer) {
+      console.log('Editor container not found.');
+      return;
+    }
+
+    // Create the menu container
+    this.menuContainer = document.createElement('div');
+    this.menuContainer.className = 'floating-menu';
+
+    // Create buttons with icons
+    const boldButton = this.createIconButton('bold', () => this.plugin.applyWrapping('**'), 'Bold');
+    const italicButton = this.createIconButton('italic', () => this.plugin.applyWrapping('_'), 'Italic');
+    const strikethroughButton = this.createIconButton('strikethrough', () => this.plugin.applyWrapping('~~'), 'Strikethrough');
+    const underlineButton = this.createIconButton('underline', () => this.plugin.applyHtmlTag('u'), 'Underline');
+
+    // Create alignment buttons
+    const alignLeftButton = this.createTextButton('align-left', '', () => this.plugin.applyAlignment('left'), 'Left Align');
+    const alignCenterButton = this.createTextButton('align-center', '', () => this.plugin.applyAlignment('center'), 'Center Align');
+    const alignRightButton = this.createTextButton('align-right', '', () => this.plugin.applyAlignment('right'), 'Right Align');
+    const alignJustifyButton = this.createTextButton('align-justify', '', () => this.plugin.applyAlignment('justify'), 'Justify');
+
+    const h1Button = this.createIconButton('heading-1', () => this.plugin.applyHeading(1), 'Heading 1');
+    const h2Button = this.createIconButton('heading-2', () => this.plugin.applyHeading(2), 'Heading 2');
+    const h3Button = this.createIconButton('heading-3', () => this.plugin.applyHeading(3), 'Heading 3');
+
+    // Create the R code chunk button with icon and text
+    const codeBlockButton = this.createTextButton('code', 'Insert R', () => this.plugin.insertCodeBlock('r'), 'R code chunk');
+
+    // Create buttons for the external plugin commands using logo & text buttons
+    // Create buttons for the external plugin commands using logo & text buttons
+    const runChunkButton = this.createTextButton(
+      'play',
+      'Run Chunk',
+      () => this.plugin.runCommand('ridian:run-current-code-chunk'), // Corrected ID
+      'Run Current Code Chunk'
+    );
+
+    const exportNoteButton = this.createTextButton(
+      'file-down',
+      'Render/Quarto',
+      () => this.plugin.runCommand('ridian:export-note-with-quarto'), // Corrected ID
+      'Export Note with Quarto'
+    );
+
+    // Apply the glow-on-hover class to the last three buttons
+    runChunkButton.classList.add('glow-on-hover');
+    exportNoteButton.classList.add('glow-on-hover');
+    codeBlockButton.classList.add('glow-on-hover');
+
+    // Append buttons to the menu container
+    this.menuContainer.appendChild(boldButton);
+    this.menuContainer.appendChild(italicButton);
+    this.menuContainer.appendChild(strikethroughButton);
+    this.menuContainer.appendChild(underlineButton);
+    this.menuContainer.appendChild(alignLeftButton);
+    this.menuContainer.appendChild(alignCenterButton);
+    this.menuContainer.appendChild(alignRightButton);
+    this.menuContainer.appendChild(alignJustifyButton);
+    this.menuContainer.appendChild(h1Button);
+    this.menuContainer.appendChild(h2Button);
+    this.menuContainer.appendChild(h3Button);
+    this.menuContainer.appendChild(codeBlockButton);
+    this.menuContainer.appendChild(runChunkButton);
+    this.menuContainer.appendChild(exportNoteButton);
+
+    // Insert the menu into the editor container's parent
+    if (editorContainer.parentElement) {
+      editorContainer.parentElement.insertBefore(this.menuContainer, editorContainer);
+    } else {
+      console.log('Parent element of editorContainer is null.');
+      return;
+    }
+
+    // Adjust the editor container to account for the menu height
+    (editorContainer as HTMLElement).style.marginTop = `${this.menuContainer.offsetHeight}px`;
+  }
+
+
+
+  /**
+   * Creates a button with only an icon.
+   */
+  createIconButton(iconId: string, onClick: () => void, tooltip?: string): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.className = 'floating-menu-button';
+    setIcon(button, iconId);
+    if (tooltip) {
+      button.setAttribute('aria-label', tooltip);
+      button.setAttribute('title', tooltip);
+    }
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
+  /**
+   * Creates a button with both an icon and text.
+   */
+  createTextButton(iconId: string, text: string, onClick: () => void, tooltip?: string): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.className = 'floating-menu-button floating-menu-button-text';
+
+    // Create the icon span
+    const iconSpan = document.createElement('span');
+    setIcon(iconSpan, iconId);
+    iconSpan.className = 'button-icon';
+
+    // Create the text span
+    const textSpan = document.createElement('span');
+    textSpan.textContent = text;
+    textSpan.className = 'button-text';
+
+    // Append icon and text to the button
+    button.appendChild(iconSpan);
+    button.appendChild(textSpan);
+
+    if (tooltip) {
+      button.setAttribute('aria-label', tooltip);
+      button.setAttribute('title', tooltip);
+    }
+
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
+
+}
 
 // Create the REnvironmentView class
 class REnvironmentView extends ItemView {
@@ -98,9 +288,9 @@ class REnvironmentView extends ItemView {
     // Create and append the title
     const title = document.createElement('h5');
     title.textContent = `R environment for ${this.noteTitle}`; // Dynamic title
-    title.style.fontFamily = '"Poppins", sans-serif'; // Heavy, stylish font
+    title.style.fontFamily = '"Helvetica Neue", sans-serif'; // Heavy, stylish font
     title.style.fontSize = '18px';
-    title.style.fontWeight = '600';
+    title.style.fontWeight = '250';
     title.style.marginBottom = '15px';
     title.style.padding = '10px';
     title.style.borderRadius = '8px';
@@ -130,9 +320,9 @@ class REnvironmentView extends ItemView {
       th.textContent = headerText;
       th.style.padding = '12px';
       th.style.textAlign = 'left';
-      th.style.fontFamily = '"Poppins", sans-serif'; // Heavy, stylish font
+      th.style.fontFamily = '"Helvetica Neue", sans-serif'; // Heavy, stylish font
       th.style.fontSize = '12px';
-      th.style.fontWeight = '600';
+      th.style.fontWeight = '250';
       th.style.borderBottom = '2px solid rgba(200, 200, 200, 0.5)';
       th.style.borderRight = '1px solid rgba(200, 200, 200, 0.3)'; // Subtle vertical border
       if (headerText === 'Type') {
@@ -237,8 +427,8 @@ class REnvironmentView extends ItemView {
     document.head.appendChild(style);
   }
 }
-// Add this new class after REnvironmentView class
 
+// Class to launch R help view in a new window
 class RHelpView extends ItemView {
   private helpContent: string = '';
 
@@ -307,10 +497,10 @@ class RHelpView extends ItemView {
 }
 
 class MyPluginSettingTab extends PluginSettingTab {
-  plugin: RCodeEvaluatorPlugin; // Updated type
+  plugin: CombinedPlugin; // Updated type
 
 
-  constructor(app: App, plugin: RCodeEvaluatorPlugin) {
+  constructor(app: App, plugin: CombinedPlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }
@@ -385,97 +575,160 @@ new Setting(containerEl)
       })
   );
 
-  }
-
-
+  // Toggle for menu
+  new Setting(containerEl)
+  .setName('Enable Floating Menu')
+  .setDesc('Toggle to show or hide the floating menu in the editor.')
+  .addToggle(toggle =>
+    toggle
+      .setValue(this.plugin.settings.enableFloatingMenu)
+      .onChange(async (value) => {
+        console.log('Floating Menu Toggle:', value);
+        this.plugin.settings.enableFloatingMenu = value;
+        await this.plugin.saveSettings();
+        if (value) {
+          this.plugin.floatingMenu.onLoad();
+          new Notice('Floating Menu Enabled.');
+        } else {
+          this.plugin.floatingMenu.onUnload();
+          new Notice('Floating Menu Disabled.');
+        }
+      })
+  );
+}
 }
 
+export default class CombinedPlugin extends Plugin {
+  // Settings
+  settings: CombinedPluginSettings;
 
-export default class RCodeEvaluatorPlugin extends Plugin {
+  // R Code Evaluator
   private rProcesses: Map<string, ChildProcessWithoutNullStreams> = new Map();
-  settings: MyPluginSettings; // Add this line
 
-  // Function to generate a unique ID based on the code chunk's position
-  generateUniqueId(position: number): string {
-    return createHash('sha256').update(position.toString()).digest('hex').substring(0, 8);
-  }
+  // Floating Menu
+  floatingMenu: FloatingMenu;
 
- // Move these methods outside of onunload()
- async loadSettings() {
-  this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-}
+  // Define unique view types
+  private VIEW_TYPE_R_ENVIRONMENT = VIEW_TYPE_R_ENVIRONMENT;
+  private VIEW_TYPE_R_HELP = VIEW_TYPE_R_HELP;
 
-async saveSettings() {
-  await this.saveData(this.settings);
-}
-
+  // Define markers and constants (from RCodeEvaluatorPlugin)
+  // ... (Include any necessary constants)
 
   async onload() {
-    console.log('Loading R Code Evaluator Plugin');
+    console.log('Loading Combined Floating Menu and R Code Evaluator Plugin');
 
-    await this.loadSettings(); // Add this line
+    // Load settings
+    await this.loadSettings();
 
-    // Add a settings tab so the user can configure the plugin
+    // Initialize Floating Menu
+    this.floatingMenu = new FloatingMenu(this);
+    if (this.settings.enableFloatingMenu) {
+      this.floatingMenu.onLoad();
+    }
+
+    // Add a settings tab
     this.addSettingTab(new MyPluginSettingTab(this.app, this));
-  
-    // Register the R environment view
-    this.registerView(VIEW_TYPE_R_ENVIRONMENT, (leaf) => new REnvironmentView(leaf));
-  
-    // Register the R help view
-    this.registerView(VIEW_TYPE_R_HELP, (leaf) => new RHelpView(leaf));
-  
+
+    // Register the R environment and help views
+    this.registerView(this.VIEW_TYPE_R_ENVIRONMENT, (leaf) => new REnvironmentView(leaf));
+    this.registerView(this.VIEW_TYPE_R_HELP, (leaf) => new RHelpView(leaf));
+
     // Ensure the R Environment and Help views are added to the right sidebar
     this.app.workspace.onLayoutReady(() => {
-  console.log('Workspace is ready, adding R Environment and Help views');
+      console.log('Workspace is ready, adding R Environment and Help views');
 
-  // Add R Environment view to the right sidebar
-if (this.app.workspace.getLeavesOfType(VIEW_TYPE_R_ENVIRONMENT).length === 0) {
-  const leaf = this.app.workspace.getRightLeaf(false);
-  if (leaf) {
-    leaf
-      .setViewState({
-        type: VIEW_TYPE_R_ENVIRONMENT,
-        active: true,
-      })
-      .then(() => {
-        console.log('REnvironmentView added to the right pane');
-      })
-      .catch((err) => {
-        console.error('Failed to add REnvironmentView to the right pane:', err);
-      });
-  } else {
-    console.error('Failed to obtain the right workspace leaf for REnvironmentView.');
+      // Add R Environment view to the right sidebar
+      if (this.app.workspace.getLeavesOfType(this.VIEW_TYPE_R_ENVIRONMENT).length === 0) {
+        const leaf = this.app.workspace.getRightLeaf(false);
+        if (leaf) {
+          leaf
+            .setViewState({
+              type: this.VIEW_TYPE_R_ENVIRONMENT,
+              active: true,
+            })
+            .then(() => {
+              console.log('REnvironmentView added to the right pane');
+            })
+            .catch((err) => {
+              console.error('Failed to add REnvironmentView to the right pane:', err);
+            });
+        } else {
+          console.error('Failed to obtain the right workspace leaf for REnvironmentView.');
+        }
+      } else {
+        console.log('REnvironmentView already exists in the workspace');
+      }
+
+      // Add R Help view to the right sidebar
+      if (this.app.workspace.getLeavesOfType(this.VIEW_TYPE_R_HELP).length === 0) {
+        const leaf = this.app.workspace.getRightLeaf(true);
+        if (leaf) {
+          leaf
+            .setViewState({
+              type: this.VIEW_TYPE_R_HELP,
+              active: true,
+            })
+            .then(() => {
+              console.log('RHelpView added to the right pane');
+            })
+            .catch((err: any) => {
+              console.error('Failed to add RHelpView to the right pane:', err);
+            });
+        } else {
+          console.error('Failed to obtain the right workspace leaf for RHelpView.');
+        }
+      } else {
+        console.log('RHelpView already exists in the workspace');
+      }
+    });
+
+    // Register commands from RCodeEvaluatorPlugin
+    this.registerRCommands();
+
+
+    console.log('Combined Plugin loaded successfully');
   }
-} else {
-  console.log('REnvironmentView already exists in the workspace');
-}
 
-// Add R Help view to the right sidebar
-if (this.app.workspace.getLeavesOfType(VIEW_TYPE_R_HELP).length === 0) {
-  const leaf = this.app.workspace.getRightLeaf(true);
-  if (leaf) {
-    leaf
-      .setViewState({
-        type: VIEW_TYPE_R_HELP,
-        active: true,
-      })
-      .then(() => {
-        console.log('RHelpView added to the right pane');
-      })
-      .catch((err: any) => {
-        console.error('Failed to add RHelpView to the right pane:', err);
-      });
-  } else {
-    console.error('Failed to obtain the right workspace leaf for RHelpView.');
+  onunload() {
+    console.log('Unloading Combined Floating Menu and R Code Evaluator Plugin');
+
+    // Unload Floating Menu
+    this.floatingMenu.onUnload();
+
+    // Terminate all R processes
+    this.rProcesses.forEach((rProcess, notePath) => {
+      console.log(`Terminating R process for note: ${notePath}`);
+      rProcess.kill();
+    });
+    this.rProcesses.clear();
+
+    // Detach the R environment and help views
+    this.app.workspace.getLeavesOfType(this.VIEW_TYPE_R_ENVIRONMENT).forEach((leaf) => {
+      console.log('Detaching REnvironmentView from workspace');
+      leaf.detach();
+    });
+
+    this.app.workspace.getLeavesOfType(this.VIEW_TYPE_R_HELP).forEach((leaf) => {
+      console.log('Detaching RHelpView from workspace');
+      leaf.detach();
+    });
+
+    console.log('Combined Plugin unloaded successfully');
   }
-} else {
-  console.log('RHelpView already exists in the workspace');
-}
 
-});
+  // Settings management
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
 
-    
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
   
+
+  // Register RCodeEvaluatorPlugin commands
+  registerRCommands() {
     // Register the command to run the current code chunk
     this.addCommand({
       id: 'run-current-code-chunk',
@@ -486,7 +739,7 @@ if (this.app.workspace.getLeavesOfType(VIEW_TYPE_R_HELP).length === 0) {
           console.error('No file associated with the current view.');
           return;
         }
-  
+
         const noteTitle = view.file.basename; // Extract the note title
         this.runCurrentCodeChunk(editor, view, noteTitle); // Pass it to the method
       },
@@ -498,38 +751,243 @@ if (this.app.workspace.getLeavesOfType(VIEW_TYPE_R_HELP).length === 0) {
       ],
     });
 
+    // Register the command to export note with Quarto
     this.addCommand({
       id: 'export-note-with-quarto',
       name: 'Export Note with Quarto',
       callback: () => this.exportNoteWithQuarto(),
     });
+  }
+   
+    // Ensure only this runCommand method exists
+    runCommand(commandId: string) {
+      console.log(`Executing command: ridian_v3:${commandId}`);
+      (this.app as any).commands.executeCommandById(commandId);
+       //this.app.commands.executeCommandById(commandId)
+       
+    }
+
+     
+
+
+
+  // ... (Include all methods from RCodeEvaluatorPlugin)
+  // For brevity, collapse unchanged methods or indicate to include them
+
+ /**
+ * Applies wrapping characters (e.g., bold, italic) around the selected text.
+ * If no text is selected, inserts the wrappers and places the cursor inside them.
+ * @param wrapper - The characters to wrap around the text.
+ */
+applyWrapping(wrapper: string) {
+	const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
+	if (!activeLeaf) return;
+  
+	const editor = activeLeaf.editor;
+	const selection = editor.getSelection();
+  
+	if (selection) {
+	  // Replace the selection with wrapped text
+	  editor.replaceSelection(`${wrapper}${selection}${wrapper}`);
+  
+	  // Calculate the new cursor position (inside the wrappers)
+	  const cursor = editor.getCursor();
+	  const start = { line: cursor.line, ch: cursor.ch - selection.length - wrapper.length };
+	  const end = { line: cursor.line, ch: cursor.ch - wrapper.length };
+  
+	  // Select the area inside the wrappers
+	  editor.setSelection(start, end);
+  
+	  // Log the new cursor position for debugging
+	  console.log(`Wrapped text from (${start.line}, ${start.ch}) to (${end.line}, ${end.ch})`);
+	} else {
+	  // Insert the wrappers at the current cursor position
+	  const cursor = editor.getCursor(); // Define cursor here
+	  editor.replaceRange(`${wrapper}${wrapper}`, cursor);
+  
+	  // Calculate the cursor position (inside the wrappers)
+	  const newCursor = { line: cursor.line, ch: cursor.ch + wrapper.length };
+  
+	  // Place the cursor inside the wrappers
+	  editor.setSelection(newCursor, newCursor);
+  
+	  // Log the new cursor position for debugging
+	  console.log(`Inserted wrappers at (${newCursor.line}, ${newCursor.ch})`);
+	}
+  
+	// Ensure the editor is focused
+	editor.focus();
+  }
+
+/**
+ * Applies an HTML tag around the selected text.
+ * @param tag - The HTML tag to apply (e.g., 'u' for underline).
+ */
+applyHtmlTag(tag: string) {
+  try {
+    const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!activeLeaf) {
+      console.error('No active Markdown view found.');
+      new Notice('No active Markdown view found.');
+      return;
+    }
+
+    const editor = activeLeaf.editor;
+    const selection = editor.getSelection();
+    const openTag = `<${tag}>`;
+    const closeTag = `</${tag}>`;
+
+    if (selection) {
+      // Wrap the selected text with the specified HTML tags
+      editor.replaceSelection(`${openTag}${selection}${closeTag}`);
+      
+      // Calculate the new cursor position after the opening tag
+      const cursor = editor.getCursor();
+      const newCh = cursor.ch - closeTag.length;
+      
+      // Set the cursor position to just after the opening tag
+      editor.setCursor({ line: cursor.line, ch: newCh });
+      
+
+    } else {
+      // Insert the HTML tags at the current cursor position
+      editor.replaceRange(`${openTag}${closeTag}`, editor.getCursor());
+      
+      // Get the updated cursor position
+      const cursor = editor.getCursor();
+      
+      // Move the cursor between the inserted tags
+      editor.setCursor({ line: cursor.line, ch: cursor.ch - closeTag.length });
+      
+
+    }
+
+    // Ensure the editor is focused after the operation
+    editor.focus();
+  } catch (error) {
+    console.error('Error in applyHtmlTag:', error);
+    new Notice(`Failed to apply HTML tag: ${error.message}`);
+  }
+}
+
+
+/**
+ * Applies a heading to the current line.
+ * @param level - The heading level (1-6).
+ */
+applyHeading(level: number) {
+  const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
+  if (activeLeaf) {
+    const editor = activeLeaf.editor;
+    const cursor = editor.getCursor();
+    const lineContent = editor.getLine(cursor.line);
+
+    const headingPrefix = '#'.repeat(level) + ' ';
+    if (lineContent.startsWith('#')) {
+      // Replace existing heading
+      const lineWithoutHashes = lineContent.replace(/^#+\s*/, '');
+      editor.replaceRange(
+        headingPrefix + lineWithoutHashes,
+        { line: cursor.line, ch: 0 },
+        { line: cursor.line, ch: lineContent.length }
+      );
+    } else {
+      // Add heading
+      editor.replaceRange(headingPrefix, { line: cursor.line, ch: 0 });
+    }
+
+    // Set cursor after heading prefix
+    const newCh = headingPrefix.length;
+    editor.setCursor({ line: cursor.line, ch: newCh });
+    console.log(`Cursor moved to (${cursor.line}, ${newCh}) after applying heading level ${level}.`);
+
+    // Ensure the editor is focused
+    editor.focus();
+  }
+}
+
+
+/**
+ * Inserts an R code block at the current cursor position.
+ * After insertion, places the cursor on the first line inside the code block.
+ */
+insertCodeBlock(language: string) {
+	const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
+	if (!activeLeaf) return;
+  
+	const editor = activeLeaf.editor;
+	const cursor = editor.getCursor();
+  
+	// Define the R code block template
+	const codeBlock = `\`\`\`${language}\n`;
+	const codeBlockEnd = `\n\`\`\`\n`;
+  
+	// Insert the opening backticks and language
+	editor.replaceRange(codeBlock, cursor);
+  
+	// Insert the closing backticks after two newlines
+	editor.replaceRange(codeBlockEnd, { line: cursor.line, ch: cursor.ch + codeBlock.length });
+  
+	// Calculate the new cursor position inside the code block
+	const newCursor = { line: cursor.line + 1, ch: 0 };
+  
+	// Move the cursor inside the code block
+	editor.setSelection(newCursor, newCursor);
+  
+	// Optional: Log the new cursor position for debugging
+	console.log(`Inserted ${language} code block at (${newCursor.line}, ${newCursor.ch}).`);
+  
+	// Ensure the editor is focused
+	editor.focus();
+  }
+  
+/**
+ * Applies text alignment by wrapping the selected text in a div with text-align style.
+ * @param alignment - The desired text alignment ('left', 'center', 'right', 'justify').
+ */
+applyAlignment(alignment: 'left' | 'center' | 'right' | 'justify') {
+  const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
+  if (activeLeaf) {
+    const editor = activeLeaf.editor;
+    const selection = editor.getSelection();
+    const openDiv = `<div style="text-align: ${alignment};">`;
+    const closeDiv = `</div>`;
     
+    if (selection) {
+      // Wrap the selected text with the alignment div
+      editor.replaceSelection(`${openDiv}\n${selection}\n${closeDiv}`);
+      
+      // Optionally, place the cursor after the closing div
+      const cursor = editor.getCursor();
+      editor.setCursor({ line: cursor.line + 1, ch: 0 });
+    } else {
+      // Insert the alignment div at the current cursor position
+      editor.replaceRange(`${openDiv}\n\n${closeDiv}`, editor.getCursor());
+      
+      // Move the cursor inside the newly inserted div
+      const cursor = editor.getCursor();
+      editor.setCursor({ line: cursor.line - 1, ch: openDiv.length + 1 });
+    }
+    
+    // Ensure the editor is focused after the operation
+    editor.focus();
+  }
+}
+
+
+  // RCodeEvaluatorPlugin specific methods
+  // Ensure these are included and properly namespaced to avoid conflicts
 
   
-    console.log('R Code Evaluator Plugin loaded successfully');
-  }
-  
 
-  onunload() {
-    console.log('Unloading R Code Evaluator Plugin');
+  // In CombinedPlugin class
+ 
+    // Function to generate a unique ID based on the code chunk's position
+    generateUniqueId(position: number): string {
+      return createHash('sha256').update(position.toString()).digest('hex').substring(0, 8);
+    }
 
-    // Terminate all R processes
-    this.rProcesses.forEach((rProcess, notePath) => {
-      console.log(`Terminating R process for note: ${notePath}`);
-      rProcess.kill();
-    });
-    this.rProcesses.clear();
-
-    // Detach the R environment view
-    this.app.workspace.getLeavesOfType(VIEW_TYPE_R_ENVIRONMENT).forEach((leaf) => {
-      console.log('Detaching REnvironmentView from workspace');
-      leaf.detach();
-    });
-
-    console.log('R Code Evaluator Plugin unloaded successfully');
-  }
-
-// Run code chunk in editing mode
+  // Run code chunk in editing mode
 runCurrentCodeChunk(editor: Editor, view: MarkdownView, noteTitle: string) {
   const cursor = editor.getCursor();
   const { startLine, endLine: originalEndLine, code, existingLabel, options } = this.getCurrentCodeChunk(editor, cursor.line);
@@ -709,10 +1167,7 @@ parseChunkOptions(editor: Editor, startLine: number): { [key: string]: string } 
 
 // Helper method to parse the label from the code chunk options
 parseChunkLabel(editor: Editor, startLine: number): string | null {
-  const fenceLine = editor.getLine(startLine).trim();
 
-  // Check if Quarto code chunk with options in comments
-  if (fenceLine.startsWith('```{r')) {
     let lineIndex = startLine + 1;
     const totalLines = editor.lineCount();
 
@@ -740,14 +1195,7 @@ parseChunkLabel(editor: Editor, startLine: number): string | null {
         // Reached the end of options
         break;
       }
-    }
-  }
-
-  // Check for R Markdown style label inside braces
-  const labelMatch = fenceLine.match(/\{.*(#[^\s\}]+).*\}/);
-  if (labelMatch) {
-    const label = labelMatch[1].substring(1); // Remove the '#' character
-    return label;
+    
   }
 
   return null;
@@ -756,9 +1204,7 @@ parseChunkLabel(editor: Editor, startLine: number): string | null {
 // Insert the generated label into the code chunk
 insertLabel(editor: Editor, startLine: number, uniqueId: string): number {
   const fenceLine = editor.getLine(startLine).trim();
-  const isQuartoChunk = fenceLine.startsWith('```{r');
 
-  if (isQuartoChunk) {
     // Insert label into Quarto chunk options as a `#| label: ...` line
     let insertPosition = startLine + 1;
     const totalLines = editor.lineCount();
@@ -777,33 +1223,7 @@ insertLabel(editor: Editor, startLine: number, uniqueId: string): number {
     editor.replaceRange(`#| label: ${uniqueId}\n`, { line: insertPosition, ch: 0 });
     console.log(`Inserted label "#| label: ${uniqueId}" into code chunk at line ${insertPosition}`);
     return 1; // We inserted one line
-  } else {
-    // Insert label into R Markdown chunk options inside the braces
-    const match = fenceLine.match(/^(```{r)(.*)(})?$/);
-    if (!match) {
-      // Not a valid code chunk start line
-      return 0; // Return 0 since no lines were inserted
-    }
-
-    const start = match[1]; // '```{r'
-    const options = match[2] || ''; // existing options
-    const end = match[3] ? '}' : ''; // closing '}'
-
-    // Append label option
-    let newOptions;
-    if (options.trim() === '') {
-      newOptions = ` {#${uniqueId}}`;
-    } else {
-      newOptions = options + ` {#${uniqueId}}`;
-    }
-
-    // Reconstruct the fence line
-    const newFenceLine = `${start}${newOptions}${end || '}'}`;
-
-    editor.setLine(startLine, newFenceLine);
-    console.log(`Inserted label "{#${uniqueId}}" into code chunk at line ${startLine}`);
-    return 0; // No new lines were inserted
-  }
+  
 }
 
 
@@ -988,7 +1408,7 @@ options(device = function(...) jpeg(filename = tempfile(), width=800, height=600
     console.log(`R process started and stored for note: ${notePath}`);
 
     return rProcess;
-  }
+  };
 
   async runRCodeInSession(
     notePath: string,
@@ -1468,6 +1888,18 @@ for (const imageFileName of imagePaths) {
 
   // Implement quarto export:
 
+/**
+ * Replaces all code fence markers from ```r to ```{r} to conform with Quarto's syntax.
+ * @param content - The content to process.
+ * @returns The content with updated code fence markers.
+ */
+replaceCodeFenceMarkers(content: string): string {
+  // Use a regular expression to find all ```r and replace with ```{r}
+  // The regex looks for lines that start with ``` followed by 'r' and possibly other language identifiers
+  const codeFenceRegex = /^```r$/gmi;
+  return content.replace(codeFenceRegex, '```{r}');
+}
+
 
   addFrontMatter(content: string, activeFile: TFile): string {
   if (content.startsWith('---\n')) {
@@ -1497,13 +1929,24 @@ stripOutputCallouts(content: string): string {
   return content.replace(outputCalloutRegex, '');
 }
 
-// save note to quarto 
+/**
+   * Saves the prepared note to a Quarto `.qmd` file within `exports/baseName/fileName`.
+   * Creates the necessary directories if they do not exist.
+   * @param content - The content to write to the file.
+   * @param originalFilePath - The original file path of the note.
+   * @returns The path to the exported file.
+   */
 async savePreparedNote(content: string, originalFilePath: string): Promise<string> {
+  // Extract the base name without the '.md' extension
   const baseName = path.basename(originalFilePath, '.md');
+  
+  // Sanitize the base name to ensure it's a valid folder name
   const sanitizedBaseName = this.sanitizeFileName(baseName);
-  const fileName = sanitizedBaseName + '_quarto.qmd'; // Use .qmd extension for Quarto
+  
+  // Define the Quarto file name
+  const fileName = `${sanitizedBaseName}_quarto.qmd`; // Use .qmd extension for Quarto
 
-  // Get the base path of the vault
+  // Determine the base path of the vault
   let basePath: string;
   const adapter = this.app.vault.adapter;
 
@@ -1514,20 +1957,53 @@ async savePreparedNote(content: string, originalFilePath: string): Promise<strin
     throw new Error('Vault adapter is not a FileSystemAdapter.');
   }
 
-  const exportFolderPath = path.join(basePath, 'Exports');
+  // Define the path to the 'exports' folder
+  const exportsFolderPath = path.join(basePath, 'exports');
 
-  // Ensure the Exports folder exists
-  if (!fs.existsSync(exportFolderPath)) {
-    fs.mkdirSync(exportFolderPath);
+  // Define the path to the subfolder within 'exports' named after the base name
+  const baseExportFolderPath = path.join(exportsFolderPath, sanitizedBaseName);
+
+  // Ensure the 'exports' folder exists
+  if (!fs.existsSync(exportsFolderPath)) {
+    try {
+      fs.mkdirSync(exportsFolderPath);
+      console.log(`Created exports folder at ${exportsFolderPath}`);
+    } catch (error) {
+      new Notice('Failed to create exports folder. Export failed.');
+      console.error('Error creating exports folder:', error);
+      throw error;
+    }
   }
 
-  const exportFilePath = path.join(exportFolderPath, fileName);
+  // Ensure the 'exports/baseName' folder exists
+  if (!fs.existsSync(baseExportFolderPath)) {
+    try {
+      fs.mkdirSync(baseExportFolderPath);
+      console.log(`Created base export folder at ${baseExportFolderPath}`);
+    } catch (error) {
+      new Notice('Failed to create base export folder. Export failed.');
+      console.error('Error creating base export folder:', error);
+      throw error;
+    }
+  }
+
+  // Define the full path to the export file
+  const exportFilePath = path.join(baseExportFolderPath, fileName);
 
   // Write the content to the export file
-  await fs.promises.writeFile(exportFilePath, content, 'utf8');
+  try {
+    await fs.promises.writeFile(exportFilePath, content, 'utf8');
+    new Notice(`Exported to ${exportFilePath}`);
+    console.log(`Successfully exported to ${exportFilePath}`);
+  } catch (error) {
+    new Notice('Failed to write export file. Export failed.');
+    console.error('Error writing export file:', error);
+    throw error;
+  }
 
   return exportFilePath;
 }
+
 
 async renderWithQuarto(exportFilePath: string) {
   return new Promise<void>((resolve, reject) => {
@@ -1587,7 +2063,6 @@ async renderWithQuarto(exportFilePath: string) {
   });
 }
 
-
 // export note with quarto
 async exportNoteWithQuarto() {
   const activeFile = this.app.workspace.getActiveFile();
@@ -1606,6 +2081,10 @@ async exportNoteWithQuarto() {
     // Strip output callouts
     content = this.stripOutputCallouts(content);
 
+    // Replace code fence markers
+   content = this.replaceCodeFenceMarkers(content);
+
+
     // Save the prepared note
     const exportFilePath = await this.savePreparedNote(content, activeFile.path);
 
@@ -1621,5 +2100,5 @@ async exportNoteWithQuarto() {
   }
 }
 
+  // ... (Include any additional methods from both plugins)
 }
-

@@ -44,7 +44,7 @@ margin-right: auto;
   background-color: var(--background-primary);
   border-left: 3px solid var(--color-accent);
     width: 800px;
-    max-width: 800px; !important
+    max-width: 800px;
 }
 
 .callout[data-callout="output"] > .callout-title {
@@ -98,3 +98,162 @@ img[alt*="right"] {
   margin-bottom: 2px;
   margin-top: 2px;
 }
+
+
+/* Floating Menu Styles */
+.floating-menu {
+  position: sticky;
+  top: 0;
+  background-color: var(--background);
+  z-index: 10;
+  display: flex;
+  width: fit-content; /* Adjust width to fit content */
+  margin: 0 auto; /* Center the menu bar within its parent */
+  padding: 5px 10px; /* Add padding around the buttons */
+  border-radius: 10px; /* Rounded corners for the menu bar */
+  box-shadow: 0 8px 12px rgba(0, 0, 0, 0.1); /* Add subtle shadow */
+}
+
+.floating-menu-button {
+  color: var(--text-normal);
+  border: 4px; 
+  padding: 8px 12px; /* Adjust padding for comfortable click area */
+  margin: 2px; 
+  border-radius: 10px; 
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s; /* Smooth transition for hover effect */
+  border-radius: 10px; /* Rounded corners for the menu bar */
+}
+
+/* Adjust icon size */
+.floating-menu-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Button spacing */
+.floating-menu-button:not(:last-child) {
+  margin-right: 4px; /* Ensure no large gaps between buttons */
+}
+
+/* Override the top margin of the editor */
+.cm-editor {
+  margin-top: 0 !important;
+}
+
+/* Ensure parent elements have transparent backgrounds */
+.view-content {
+  background-color: transparent !important;
+}
+
+/* Styling for button text */
+.floating-menu-button .button-text {
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-weight: 250; /* Thin font weight */
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* Enhanced Glow-on-Hover Effect */
+.glow-on-hover {
+  border: 4px; 
+  padding: 8px 12px; /* Adjust padding for comfortable click area */
+  margin: 2px; 
+  position: relative;
+  overflow: visible; /* Ensure glow isn't clipped */
+  color: #fff; /* Text color */
+  background: #111; /* Button background color */
+  outline: none;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: color 0.3s ease-in-out;
+}
+
+.glow-on-hover:before {
+  content: '';
+  background: linear-gradient(45deg, #48ff00, #00ffd5, #002bff, #7a00ff);
+  position: absolute;
+  top: -2px; /* Increased to accommodate larger blur */
+  left: -2px; /* Increased to accommodate larger blur */
+  background-size: 110%; /* Increased for smoother animation */
+  z-index: -2; /* Ensure it stays behind the button */
+  filter: blur(2px); /* Increased blur for a more prominent glow */
+  width: calc(100% + 2px); /* Adjusted to match increased top and left */
+  height: calc(100% + 2px); /* Adjusted to match increased top and left */
+  animation: glowing 2s linear infinite;
+  opacity: 0;
+  transition: opacity 0.4s ease-in-out;
+  border-radius: 10px; /* Slightly increased border-radius */
+}
+
+.glow-on-hover:active {
+  color: #000;
+  background: #fff; /* Optional: Change background on active state */
+}
+
+.glow-on-hover:active:after {
+  background: transparent;
+}
+
+.glow-on-hover:hover:before {
+  opacity: 1;
+}
+
+.glow-on-hover:after {
+  z-index: -1;
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: #111;
+  left: 0;
+  top: 0;
+  border-radius: 10px;
+}
+
+@keyframes glowing {
+  0% { background-position: 0 0; }
+  50% { background-position: 130% 0; } /* Adjusted to match background-size */
+  100% { background-position: 0 0; }
+}
+
+
+
+/* R Syntax Highlighting */
+.cm-keyword {
+  color: #007acc; /* Blue */
+  font-weight: bold;
+}
+
+.cm-atom {
+  color: #e69138; /* Orange */
+}
+
+.cm-string {
+  color: #a31515; /* Red */
+}
+
+.cm-comment {
+  color: #008000; /* Green */
+  font-style: italic;
+}
+
+.cm-number {
+  color: #098658; /* Teal */
+}
+
+.cm-operator {
+  color: #000000; /* Black */
+}
+
+.cm-punctuation {
+  color: #000000; /* Black */
+}
+
+.cm-variable {
+  color: #001080; /* Navy */
+}
+

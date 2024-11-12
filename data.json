@@ -1,0 +1,6 @@
+{
+  "rExecutablePath": "/usr/local/bin/R",
+  "rstudioPandocPath": "/opt/homebrew/bin/",
+  "quartoExecutablePath": "/usr/local/bin/quarto",
+  "enableFloatingMenu": true
+}
