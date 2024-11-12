@@ -1,19 +1,9 @@
 
-<p align="center"><image src="https://github.com/user-attachments/assets/fbf70dac-9c0c-4f98-9b39-c9411e26fcda"></p>
 
 
 
 ## This is Ridian, _**R**_ in Obs _**idian**_
-
-> [!WARNING]
-> **BETA release, wouldn't use on your precious main vault innitially**
->
-> Code potentially unstable and executes R code outside your vault, only ever execute code you trust!
-> 
-> check: Known Issues/To-Do below to ensure there arent any dealbreakers.
-
-Run R code in obsidian (cmd-R/cntrol-R to run a code chunk) and more. This is a somewhat ambitious project to **make R a first class citizen of the Obsidian Universe**.
-
+![image](https://github.com/user-attachments/assets/bf0c2809-e231-40d9-a047-e28c9d7a12c2)
 
 **What this is:**
 
