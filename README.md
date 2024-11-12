@@ -4,7 +4,7 @@
 
 ## This is Ridian, _**R**_ in Obs _**idian**_
 
-R notebooks, and Quarto rendering fron Obsidian:
+literal programming with R notebooks, and Quarto rendering from within Obsidian:
 
 ![image](https://github.com/user-attachments/assets/bf0c2809-e231-40d9-a047-e28c9d7a12c2)
 
@@ -21,7 +21,7 @@ R notebooks, and Quarto rendering fron Obsidian:
 **What this won't be:**
 
 - An Rstudio replacement
-- An RMarkdown/Quarto repalacement
+- an positro replacement
 
 - It wont cover other programming languages (5% chance of python), here is an excelent option for that: [execute code plugin](https://github.com/twibiral/obsidian-execute-code)
 
