@@ -30,7 +30,9 @@ R notebooks, and Quarto rendering fron Obsidian:
 
 
 
-https://github.com/user-attachments/assets/4450185e-f5e1-477a-b952-7d08fd27e96d
+
+https://github.com/user-attachments/assets/07f4a935-b53a-429a-96e4-d6f21f3a483a
+
 
 
 
