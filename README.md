@@ -27,7 +27,8 @@ literal programming with R notebooks, and Quarto rendering from within Obsidian:
 
 > [!IMPORTANT]
 > In the Ridian settings provide the path to your R/pandoc/quarto executables, The R executable can for example be at Mac: /usr/local/bin/R Windows: C:\Program Files (x86)\R\R-4.4.1\bin\R.exe
-> the pluign will try to guess the R install (and probably fail)
+> 
+> The plugin will try to guess the R install (and probably fail)
 
 
 ## Demo video:
