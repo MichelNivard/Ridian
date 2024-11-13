@@ -220,40 +220,72 @@ img[alt*="right"] {
   100% { background-position: 0 0; }
 }
 
-
-
-/* R Syntax Highlighting */
-.cm-keyword {
-  color: #007acc; /* Blue */
+/* Light Mode */
+.theme-light .cm-keyword {
+  color: #0000ff; /* Bright Blue */
   font-weight: bold;
 }
 
-.cm-atom {
-  color: #e69138; /* Orange */
+.theme-light .cm-atom {
+  color: #aa5500; /* Brownish-Orange */
 }
 
-.cm-string {
-  color: #a31515; /* Red */
+.theme-light .cm-string {
+  color: #008000; /* Dark Green */
 }
 
-.cm-comment {
-  color: #008000; /* Green */
+.theme-light .cm-comment {
+  color: #999999; /* Grey */
   font-style: italic;
 }
 
-.cm-number {
-  color: #098658; /* Teal */
+.theme-light .cm-number {
+  color: #ff00ff; /* Magenta */
 }
 
-.cm-operator {
+.theme-light .cm-operator {
   color: #000000; /* Black */
 }
 
-.cm-punctuation {
+.theme-light .cm-punctuation {
   color: #000000; /* Black */
 }
 
-.cm-variable {
-  color: #001080; /* Navy */
+.theme-light .cm-variable {
+  color: #0000ff; /* Blue */
 }
 
+/* Dark Mode */
+.theme-dark .cm-keyword {
+  color: #7aa2f7; /* Soft Blue */
+  font-weight: bold;
+}
+
+.theme-dark .cm-atom {
+  color: #dca561; /* Muted Orange */
+}
+
+.theme-dark .cm-string {
+  color: #98c379; /* Green */
+}
+
+.theme-dark .cm-comment {
+  color: #5c6370; /* Gray */
+  font-style: italic;
+}
+
+.theme-dark .cm-number {
+  color: #d55fde; /* Soft Magenta */
+}
+
+.theme-dark .cm-operator {
+  color: #c8ccd4; /* Light Gray */
+}
+
+.theme-dark .cm-punctuation {
+  color: #abb2bf; /* Gray */
+}
+
+.theme-dark .cm-variable {
+  color: #61afef; /* Lighter Blue */
+}

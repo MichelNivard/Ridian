@@ -1,6 +1,24 @@
 {
   "rExecutablePath": "/usr/local/bin/R",
-  "rstudioPandocPath": "/opt/homebrew/bin/",
+  "rstudioPandocPath": "/opt/homebrew/bin/pandoc",
   "quartoExecutablePath": "/usr/local/bin/quarto",
-  "enableFloatingMenu": true
+  "enableFloatingMenu": true,
+  "rPaths": [
+    "/usr/local/bin/R",
+    "/usr/local/bin/R",
+    "/usr/local/bin/R",
+    "/usr/local/bin/R"
+  ],
+  "pandocPaths": [
+    "/opt/homebrew/bin/pandoc",
+    "/opt/homebrew/bin/pandoc",
+    "/opt/homebrew/bin/pandoc",
+    "/opt/homebrew/bin/pandoc"
+  ],
+  "quartoPaths": [
+    "/usr/local/bin/quarto",
+    "/usr/local/bin/quarto",
+    "/usr/local/bin/quarto",
+    "/usr/local/bin/quarto"
+  ]
 }

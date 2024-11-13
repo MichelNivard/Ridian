@@ -1,6 +1,6 @@
 {
 	"name": "Ridian",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"description": "Execute R code blocks and display outputs and plots within Obsidian.",
 	"main": "main.js",
 	"scripts": {
@@ -12,6 +12,7 @@
 	"author": "",
 	"license": "GNU GPL v3.0",
 	"devDependencies": {
+		"@types/glob": "^8.1.0",
 		"@types/node": "^16.11.6",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
@@ -24,6 +25,8 @@
 	},
 	"dependencies": {
 		"@types/prismjs": "^1.26.5",
-		"prismjs": "^1.29.0"
+		"glob": "^9.3.5",
+		"prismjs": "^1.29.0",
+		"which": "^5.0.0"
 	}
 }

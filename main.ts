@@ -11,6 +11,7 @@ import {
   PluginSettingTab,
   Setting,
   FileSystemAdapter,
+  DropdownComponent
   
 } from 'obsidian';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
@@ -20,8 +21,8 @@ import { promisify } from 'util';
 import * as os from 'os';
 import { createHash } from 'crypto';
 import { pathToFileURL } from 'url';
-
-
+import { execSync } from 'child_process';
+const which = require('which');
 
 
 // Promisify fs functions
@@ -32,24 +33,20 @@ const VIEW_TYPE_R_ENVIRONMENT = 'r-environment-view';
 const VIEW_TYPE_R_HELP = 'r-help-view';
 
 
-
-
-// Define the settings interface
+// Extend the settings interface
 interface CombinedPluginSettings {
   rExecutablePath: string;
   rstudioPandocPath: string;
   quartoExecutablePath: string;
-  enableFloatingMenu: boolean; // **Add this line**
-  // Add any additional settings from FloatingMenuPlugin if needed
+  enableFloatingMenu: boolean;
 }
 
 // Define default settings
 const DEFAULT_SETTINGS: CombinedPluginSettings = {
-  rExecutablePath: '/usr/local/bin/R',
-  rstudioPandocPath: '/opt/homebrew/bin/',
-  quartoExecutablePath: '/usr/local/bin/quarto',
-  enableFloatingMenu: true, // **Add this line with a default value**
-  // Initialize additional settings if needed
+  rExecutablePath: '',
+  rstudioPandocPath: '',
+  quartoExecutablePath: '',
+  enableFloatingMenu: true,
 };
 
 // FloatingMenuPlugin functionality
@@ -510,32 +507,22 @@ class MyPluginSettingTab extends PluginSettingTab {
 
     containerEl.empty();
 
+    console.log('Displaying settings');
+
     containerEl.createEl('h2', { text: 'R Integration Settings' });
 
 // Function to process path for Windows compatibility with type annotation
-function formatPathForWindows(path: string): string {
-  if (navigator.platform.includes('Win')) {
-    // First, replace all single backslashes with double backslashes
-    // Then, replace all forward slashes with double backslashes
-    return path.replace(/\\/g, '\\\\').replace(/\//g, '\\\\');
-  }
-  return path;
-}
-
 
 // Setting for R Executable Path
 new Setting(containerEl)
   .setName('Path to R Executable')
-  .setDesc('Specify the full path to your R executable.')
-  .addText((text) =>
+  .setDesc('Specify the path to your R executable.')
+  .addText(text =>
     text
-       .setPlaceholder('/usr/local/bin/R')
-      .setValue(formatPathForWindows(this.plugin.settings.rExecutablePath))
+      .setPlaceholder('Enter path to R executable')
+      .setValue(this.plugin.settings.rExecutablePath)
       .onChange(async (value) => {
-        const formattedValue = formatPathForWindows(value.trim());
-        console.log('R Executable Path changed to: ' + formattedValue);
-        
-        this.plugin.settings.rExecutablePath = formattedValue;
+        this.plugin.settings.rExecutablePath = value.trim();
         await this.plugin.saveSettings();
         new Notice('R executable path updated successfully.');
       })
@@ -544,36 +531,34 @@ new Setting(containerEl)
 // Setting for RStudio Pandoc Path
 new Setting(containerEl)
   .setName('Path to RStudio Pandoc')
-  .setDesc('Specify the full path to your RStudio Pandoc installation.')
-  .addText((text) =>
+  .setDesc('Specify the path to your RStudio Pandoc installation.')
+  .addText(text =>
     text
-      .setPlaceholder('/opt/homebrew/bin/')
-      .setValue(formatPathForWindows(this.plugin.settings.rstudioPandocPath))
+      .setPlaceholder('Enter path to RStudio Pandoc')
+      .setValue(this.plugin.settings.rstudioPandocPath)
       .onChange(async (value) => {
-        const formattedValue = formatPathForWindows(value.trim());
-        console.log('RStudio Pandoc Path changed to: ' + formattedValue);
-        
-        this.plugin.settings.rstudioPandocPath = formattedValue;
+        this.plugin.settings.rstudioPandocPath = value.trim();
         await this.plugin.saveSettings();
         new Notice('RStudio Pandoc path updated successfully.');
       })
   );
 
-  // Setting for Quarto Executable Path
-  new Setting(containerEl)
+// Setting for Quarto Executable Path
+new Setting(containerEl)
   .setName('Quarto Executable Path')
-  .setDesc('Specify the full path to your Quarto executable. Example: /usr/local/bin/quarto')
-  .addText((text) =>
+  .setDesc('Specify the path to your Quarto executable.')
+  .addText(text =>
     text
-      .setPlaceholder('/usr/local/bin/quarto')
+      .setPlaceholder('Enter path to Quarto executable')
       .setValue(this.plugin.settings.quartoExecutablePath)
       .onChange(async (value) => {
-        console.log('Quarto Executable Path changed to: ' + value);
         this.plugin.settings.quartoExecutablePath = value.trim();
         await this.plugin.saveSettings();
         new Notice('Quarto executable path updated successfully.');
       })
   );
+
+
 
   // Toggle for menu
   new Setting(containerEl)
@@ -595,8 +580,8 @@ new Setting(containerEl)
         }
       })
   );
-}
-}
+
+}}
 
 export default class CombinedPlugin extends Plugin {
   // Settings
@@ -615,11 +600,119 @@ export default class CombinedPlugin extends Plugin {
   // Define markers and constants (from RCodeEvaluatorPlugin)
   // ... (Include any necessary constants)
 
+ 
+
+  
+// Retrieve the PATH from the user’s shell to include common directories
+getUserShellPath(): string {
+  try {
+    const userPath = execSync('echo $PATH', { shell: '/bin/bash' }).toString().trim();
+    return userPath;
+  } catch (error) {
+    console.error("Could not retrieve PATH from user's shell:", error);
+    return process.env.PATH || '';
+  }
+}
+setupPathEnvironment() {
+  process.env.PATH = this.getUserShellPath();
+
+  if (process.platform === 'darwin') {
+    process.env.PATH += ':/usr/local/bin:/opt/homebrew/bin';
+  } else if (process.platform === 'linux') {
+    process.env.PATH += ':/usr/local/bin';
+  } else if (process.platform === 'win32') {
+    // Use ProgramFiles and ProgramFiles(x86) environment variables for portability
+    const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
+    const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+
+    let rPaths: string[] = [];
+
+    // Function to find R paths in a given base directory
+    function findRPaths(baseDir: string) {
+      try {
+        const rDir = path.join(baseDir, 'R');
+        if (fs.existsSync(rDir)) {
+          let versions = fs.readdirSync(rDir);
+
+          // Filter directories that match the pattern 'R-x.x.x'
+          versions = versions.filter(version => /^R-\d+\.\d+\.\d+$/.test(version));
+
+          // Sort the versions in descending order
+          versions.sort((a, b) => {
+            const versionA = a.match(/R-(\d+\.\d+\.\d+)/)?.[1];
+            const versionB = b.match(/R-(\d+\.\d+\.\d+)/)?.[1];
+            if (versionA && versionB) {
+              return compareVersions(versionB, versionA); // Descending order
+            } else {
+              return 0;
+            }
+          });
+
+          versions.forEach(version => {
+            const binPath = path.join(rDir, version, 'bin');
+            if (fs.existsSync(binPath)) {
+              rPaths.push(binPath);
+            }
+          });
+        }
+      } catch (error) {
+        console.error(`Error accessing ${baseDir}:`, error);
+      }
+    }
+
+    // Compare version strings 'x.x.x'
+    function compareVersions(v1: string, v2: string): number {
+      const v1Parts = v1.split('.').map(Number);
+      const v2Parts = v2.split('.').map(Number);
+      for (let i = 0; i < v1Parts.length; i++) {
+        if (v1Parts[i] > v2Parts[i]) return 1;
+        if (v1Parts[i] < v2Parts[i]) return -1;
+      }
+      return 0;
+    }
+
+    // Find R paths in both ProgramFiles and ProgramFiles(x86)
+    findRPaths(programFiles);
+    findRPaths(programFilesX86);
+
+    // Append found R paths to PATH
+    rPaths.forEach(rPath => {
+      process.env.PATH = `${rPath};${process.env.PATH}`;
+    });
+
+    console.log('Updated PATH environment variable:', process.env.PATH);
+  }
+}
+
+
+
+// Find executable paths using `which`
+async getExecutablePaths(executable: string): Promise<string[]> {
+  const isWindows = process.platform === 'win32';
+  const executableName = isWindows ? `${executable}.exe` : executable; // Add .exe for Windows
+
+  try {
+    const paths = await which(executable, { all: true });
+    return Array.isArray(paths) ? paths : [paths];
+  } catch (error) {
+    console.error(`Error finding ${executable}:`, error);
+    return [];
+  }
+}
+
+
   async onload() {
     console.log('Loading Combined Floating Menu and R Code Evaluator Plugin');
 
     // Load settings
     await this.loadSettings();
+    
+
+    // Set up PATH environment
+    this.setupPathEnvironment();
+
+
+
 
     // Initialize Floating Menu
     this.floatingMenu = new FloatingMenu(this);
@@ -1365,9 +1458,13 @@ removeOutputCallout(editor: Editor, uniqueId: string) {
 
   // Start R process
   startRProcess(notePath: string): ChildProcessWithoutNullStreams {
-    const rExecutable = this.settings.rExecutablePath || '/usr/local/bin/R'; // Use user-specified path or default
+    const rExecutable = this.settings.rExecutablePath.trim() || '/usr/local/bin/R'; // Use user-specified path or default
+    if (!rExecutable) {
+      new Notice('R executable path is not set. Please update the path in settings.');
+      throw new Error('R executable path is not set.');
+    }
     console.log(`Starting R process for note: ${notePath} using executable: ${rExecutable}`);
-   
+
 
   // User feedback if R path fails:
     if (!fs.existsSync(rExecutable)) {
