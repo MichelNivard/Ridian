@@ -185,8 +185,6 @@ class FloatingMenu {
     (editorContainer as HTMLElement).style.marginTop = `${this.menuContainer.offsetHeight}px`;
   }
 
-
-
   /**
    * Creates a button with only an icon.
    */
@@ -235,7 +233,6 @@ class FloatingMenu {
 
 }
 
-// Create the REnvironmentView class
 class REnvironmentView extends ItemView {
   private environmentData: any[] = [];
   private noteTitle: string = ''; // Property to store the note title
@@ -253,7 +250,7 @@ class REnvironmentView extends ItemView {
   }
 
   getIcon() {
-    return 'table'; // Changed to a valid Obsidian icon
+    return 'table'; // Use a valid Obsidian icon
   }
 
   async onOpen() {
@@ -279,58 +276,26 @@ class REnvironmentView extends ItemView {
     this.containerEl.empty();
 
     const content = document.createElement('div');
-    content.style.padding = '10px';
-    content.style.overflowY = 'auto';
+    content.classList.add('r-environment-content');
 
     // Create and append the title
     const title = document.createElement('h5');
     title.textContent = `R environment for ${this.noteTitle}`; // Dynamic title
-    title.style.fontFamily = '"Helvetica Neue", sans-serif'; // Heavy, stylish font
-    title.style.fontSize = '18px';
-    title.style.fontWeight = '250';
-    title.style.marginBottom = '15px';
-    title.style.padding = '10px';
-    title.style.borderRadius = '8px';
-    title.style.textAlign = 'center';
-    title.classList.add('theme-aware-title');
+    title.classList.add('r-environment-title');
 
     content.appendChild(title);
 
     // Create a table
     const table = document.createElement('table');
-    table.style.width = '100%';
-    table.style.borderCollapse = 'separate';
-    table.style.borderSpacing = '0';
-    table.style.fontFamily = `'Monaco', 'monospace'`;
-    table.style.whiteSpace = 'nowrap';
-    table.style.overflow = 'hidden';
-    table.style.borderRadius = '12px';
-    table.style.tableLayout = 'fixed';
-    table.style.border = '1px solid rgba(200, 200, 200, 0.3)'; // Subtle vertical border for the table
-    table.classList.add('theme-aware-table');
+    table.classList.add('r-environment-table');
 
     // Create table header
     const headerRow = document.createElement('tr');
     const headers = ['Name', 'Type', 'Size', 'Value'];
-    headers.forEach((headerText, index) => {
+    headers.forEach((headerText) => {
       const th = document.createElement('th');
       th.textContent = headerText;
-      th.style.padding = '12px';
-      th.style.textAlign = 'left';
-      th.style.fontFamily = '"Helvetica Neue", sans-serif'; // Heavy, stylish font
-      th.style.fontSize = '12px';
-      th.style.fontWeight = '250';
-      th.style.borderBottom = '2px solid rgba(200, 200, 200, 0.5)';
-      th.style.borderRight = '1px solid rgba(200, 200, 200, 0.3)'; // Subtle vertical border
-      if (headerText === 'Type') {
-        th.style.width = '90px';
-      }
-      if (headerText === 'Size') {
-        th.style.width = '80px';
-      }
-      if (headerText === 'Name') {
-        th.style.width = '60px';
-      }
+      th.classList.add('r-environment-header-cell');
       headerRow.appendChild(th);
     });
     table.appendChild(headerRow);
@@ -339,32 +304,15 @@ class REnvironmentView extends ItemView {
     const variables = this.environmentData;
     variables.forEach((variable: any) => {
       const row = document.createElement('tr');
-
-      // Optional: Add hover effect to rows
-      row.style.transition = 'background-color 0.3s';
-      row.style.borderRadius = '12px';
-      row.classList.add('theme-aware-row');
-      row.addEventListener('mouseover', () => {
-        row.style.backgroundColor = 'var(--hover-background-color)';
-      });
-      row.addEventListener('mouseout', () => {
-        row.style.backgroundColor = 'var(--row-background-color)';
-      });
+      row.classList.add('r-environment-row');
 
       // Helper function to create cells
       const createCell = (text: string, textAlign: string = 'left') => {
         const cell = document.createElement('td');
         cell.textContent = text;
-        cell.style.padding = '12px';
-        cell.style.borderBottom = '1px solid rgba(200, 200, 200, 0.5)';
-        cell.style.borderRight = '1px solid rgba(200, 200, 200, 0.3)'; // Subtle vertical border for each cell
-        cell.style.textAlign = textAlign;
-        cell.style.fontSize = '12px';
-        cell.style.overflow = 'hidden';
-        cell.style.textOverflow = 'ellipsis';
-        cell.classList.add('theme-aware-cell');
-        if (textAlign === 'left' && text === variable.value) {
-          cell.style.width = '65%';
+        cell.classList.add('r-environment-cell');
+        if (textAlign === 'right') {
+          cell.classList.add('text-align-right');
         }
         return cell;
       };
@@ -394,8 +342,7 @@ class REnvironmentView extends ItemView {
         ? variable.value.slice(0, 5).join(', ') + ' ...'
         : variable.value.toString();
       const valCell = createCell(valuePreview);
-      valCell.style.whiteSpace = 'nowrap';
-      valCell.style.width = '65%';
+      valCell.classList.add('value-cell');
       row.appendChild(valCell);
 
       table.appendChild(row);
@@ -403,25 +350,6 @@ class REnvironmentView extends ItemView {
 
     content.appendChild(table);
     this.containerEl.appendChild(content);
-
-    // CSS to adapt to Obsidian's theme
-    const style = document.createElement('style');
-    style.textContent = `
-      .theme-aware-title, .theme-aware-table, .theme-aware-cell, .theme-aware-row {
-        color: var(--text-normal);
-        background: var(--background-primary);
-      }
-      .theme-aware-row {
-        background: var(--background-secondary);
-      }
-      .theme-aware-row:hover {
-        background: var(--background-hover);
-      }
-      .theme-aware-table th {
-        color: var(--text-muted);
-      }
-    `;
-    document.head.appendChild(style);
   }
 }
 
@@ -467,31 +395,23 @@ class RHelpView extends ItemView {
     this.contentEl.empty();
 
     const content = document.createElement('div');
-    content.style.padding = '1px';
-    content.style.overflowY = 'auto';
-    content.style.fontFamily = 'sans-serif'; // Default to sans-serif for regular text
+    content.classList.add('r-help-content');
 
     content.innerHTML = this.helpContent; // Render as HTML
 
-    // Apply styles to tighten vertical spacing
-    const style = document.createElement('style');
-    style.innerHTML = `
-        code {
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 0.95em;
-            background-color: #f4f4f4;
-            padding: 2px 4px;
-            border-radius: 4px;
-        }
-    `;
-    content.appendChild(style);
-    
+    // Instead of appending a `<style>` element, we'll move the styles to styles.css
+    // and add a class to the `<code>` elements
+
+    // Ensure that code elements inside the content have the appropriate class
+    const codeElements = content.querySelectorAll('code');
+    codeElements.forEach((codeElement) => {
+      codeElement.classList.add('r-help-code');
+    });
+
     this.contentEl.appendChild(content);
+  }
 }
 
-
-
-}
 
 class MyPluginSettingTab extends PluginSettingTab {
   plugin: CombinedPlugin; // Updated type
