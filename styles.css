@@ -289,3 +289,146 @@ img[alt*="right"] {
 .theme-dark .cm-variable {
   color: #61afef; /* Lighter Blue */
 }
+
+
+/* R environemnt style */
+
+ /* Container */
+.r-environment-content {
+  padding: 10px;
+  overflow-y: auto;
+}
+
+/* Title */
+.r-environment-title {
+  font-family: "Helvetica Neue", sans-serif;
+  font-size: 18px;
+  font-weight: 250;
+  margin-bottom: 15px;
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
+  color: var(--text-normal);
+  background: var(--background-primary);
+}
+
+/* Table */
+.r-environment-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: 'Monaco', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  border-radius: 12px;
+  table-layout: fixed;
+  border: 1px solid rgba(200, 200, 200, 0.3);
+  color: var(--text-normal);
+  background: var(--background-primary);
+}
+
+/* Table Header */
+.r-environment-header-cell {
+  padding: 12px;
+  text-align: left;
+  font-family:"Helvetica Neue", "Liberation Sans", "Roboto", sans-serif;
+  font-size: 12px;
+  font-weight: 250;
+  border-bottom: 2px solid rgba(200, 200, 200, 0.5);
+  border-right: 1px solid rgba(200, 200, 200, 0.3);
+  color: var(--text-muted);
+}
+
+/* Adjust column widths */
+.r-environment-header-cell:nth-child(1) {
+  width: 60px;
+}
+.r-environment-header-cell:nth-child(2) {
+  width: 90px;
+}
+.r-environment-header-cell:nth-child(3) {
+  width: 80px;
+}
+
+/* Table Rows */
+.r-environment-row {
+  transition: background-color 0.3s;
+  border-radius: 12px;
+  background: var(--background-secondary);
+}
+.r-environment-row:hover {
+  background: var(--background-hover);
+}
+
+/* Table Cells */
+.r-environment-cell {
+  padding: 12px;
+  border-bottom: 1px solid rgba(200, 200, 200, 0.5);
+  border-right: 1px solid rgba(200, 200, 200, 0.3);
+  text-align: left;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-normal);
+  background: var(--background-primary);
+}
+
+.text-align-right {
+  text-align: right;
+}
+
+.value-cell {
+  white-space: nowrap;
+  width: 65%;
+}
+
+/* Adapt to Obsidian's theme variables */
+.r-environment-title,
+.r-environment-table,
+.r-environment-cell,
+.r-environment-row {
+  color: var(--text-normal);
+  background: var(--background-primary);
+}
+
+.r-environment-row {
+  background: var(--background-secondary);
+}
+
+.r-environment-row:hover {
+  background: var(--background-hover);
+}
+
+.r-environment-header-cell {
+  color: var(--text-muted);
+}
+
+
+
+/* Stlye R Help view +/
+
+/* R Help View Content */
+.r-help-content {
+  padding: 1px;
+  overflow-y: auto;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
+  color: var(--text-normal);
+  background-color: var(--background-secondary);
+}
+
+/* Code Elements in R Help View */
+.r-help-code {
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.95em;
+  background-color: var(--background-secondary);
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+.r-help-content blockquote {
+  border-left: 4px solid var(--background-modifier-border);
+  padding: 0 1em;
+  color: var(--text-muted);
+  margin: 0 0 1em;
+}
