@@ -1,1 +1,1 @@
-{"id":"ridian","name":"Ridian","version":"0.0.4","minAppVersion":"0.15.0","description":"Execute R code blocks and display outputs and plots & render documents with Quarto within Obsidian.","author":"Michel Nivard","authorUrl":"https://github.com/MichelNivard/Ridian","isDesktopOnly":true}
+{"id":"ridian","name":"Ridian","version":"0.0.5","minAppVersion":"0.15.0","description":"Execute R code blocks and display outputs and plots & render documents with Quarto within Obsidian.","author":"Michel Nivard","authorUrl":"https://github.com/MichelNivard/Ridian","isDesktopOnly":true}

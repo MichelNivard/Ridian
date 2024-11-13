@@ -1,6 +1,6 @@
 {
 	"name": "Ridian",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"description": "Execute R code blocks and display outputs and plots within Obsidian.",
 	"main": "main.js",
 	"scripts": {
