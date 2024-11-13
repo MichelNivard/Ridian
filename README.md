@@ -25,6 +25,10 @@ literal programming with R notebooks, and Quarto rendering from within Obsidian:
 
 - It wont cover other programming languages (5% chance of python), here is an excelent option for that: [execute code plugin](https://github.com/twibiral/obsidian-execute-code)
 
+> [!IMPORTANT]
+> In the Ridian settings provide the path to your R/pandoc/quarto executable, which can for example be: Mac: /usr/local/bin/R Windows: C:\Program Files (x86)\R\R-4.4.1\bin\R.exe
+> 
+
 
 ## Demo video:
 
