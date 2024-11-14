@@ -240,7 +240,7 @@ img[alt*="right"] {
 }
 
 .theme-light .cm-number {
-  color: #ff00ff; /* Magenta */
+  color: #a4032b; /* Red */
 }
 
 .theme-light .cm-operator {
@@ -275,7 +275,7 @@ img[alt*="right"] {
 }
 
 .theme-dark .cm-number {
-  color: #d55fde; /* Soft Magenta */
+  color: #f76685; /* Soft Red */
 }
 
 .theme-dark .cm-operator {
@@ -411,7 +411,8 @@ img[alt*="right"] {
 .r-help-content {
   padding: 1px;
   overflow-y: auto;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
+  font-family: "Helvetica Neue", "Roboto",  Arial, sans-serif;
+  font-weight: 250; /* Thin font weight */
   color: var(--text-normal);
   background-color: var(--background-secondary);
 }
