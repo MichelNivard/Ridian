@@ -664,7 +664,7 @@ function insertOutputWithCallout(
 
   imagePaths.forEach((imagePath) => {
     const vaultImagePath = `${imagePath}`;
-    const imageMarkdown = `![centre|480](${vaultImagePath})`;
+    const imageMarkdown = `![center|480](${vaultImagePath})`;
     contentLines.push(`> ${imageMarkdown}`);
   });
 
