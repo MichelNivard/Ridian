@@ -638,72 +638,83 @@ options(device = function(...) jpeg(filename = tempfile(), width=800, height=600
   return rProcess;
 }
 
+
+function escapeMarkdown(text: string): string {
+  return text.replace(/([\\`*_{}[\]()#+\-!>|])/g, '\\$1');
+}
+
 function insertOutputWithCallout(
-    editor: Editor,
-    endLine: number,
-    output: string,
-    imagePaths: string[],
-    widgetPaths: string[],
-    uniqueId: string,
-    options: { [key: string]: string }
-  ) {
-    const contentLines: string[] = [];
-  
-    if (output && output.trim() !== '') {
-      const outputLines = output.trim().split('\n').map((line) => '> ' + line);
-      contentLines.push(...outputLines);
-    }
-  
-    imagePaths.forEach((imagePath) => {
-      const vaultImagePath = `${imagePath}`;
-      const imageMarkdown = `![center|480](${vaultImagePath})`;
-      contentLines.push(`> ${imageMarkdown}`);
-    });
-  
-    widgetPaths.forEach((widgetPath) => {
-      const widgetMarkdown = `<iframe src="${widgetPath}" width="100%" height="680px"></iframe>`;
-      contentLines.push(`> ${widgetMarkdown}`);
-    });
-  
-    if (contentLines.length === 0) {
-      return;
-    }
-  
-    let outputContent = `> [!OUTPUT]+ {#output-${uniqueId}}\n`;
-    outputContent += contentLines.join('\n') + '\n';
-    outputContent += '> \n';
-  
-    let existingOutputStart = -1;
-    let existingOutputEnd = -1;
-    const totalLines = editor.lineCount();
-  
-    for (let i = 0; i < totalLines; i++) {
-      const line = editor.getLine(i);
-      if (line.trim() === `> [!OUTPUT]+ {#output-${uniqueId}}`) {
-        existingOutputStart = i;
-        existingOutputEnd = i;
-        while (existingOutputEnd + 1 < totalLines) {
-          const nextLine = editor.getLine(existingOutputEnd + 1);
-          if (!nextLine.startsWith('> ') && nextLine.trim() !== '') {
-            break;
-          }
-          existingOutputEnd++;
+  editor: Editor,
+  endLine: number,
+  output: string,
+  imagePaths: string[],
+  widgetPaths: string[],
+  uniqueId: string,
+  options: { [key: string]: string },
+  isError: boolean = false // Optional parameter to style errors differently
+) {
+  const contentLines: string[] = [];
+
+  if (output && output.trim() !== '') {
+    // Escape markdown special characters in the output
+    const escapedOutput = escapeMarkdown(output.trim());
+    const outputLines = escapedOutput.split('\n').map((line) => '> ' + line);
+    contentLines.push(...outputLines);
+  }
+
+  imagePaths.forEach((imagePath) => {
+    const vaultImagePath = `${imagePath}`;
+    const imageMarkdown = `![centre|480](${vaultImagePath})`;
+    contentLines.push(`> ${imageMarkdown}`);
+  });
+
+  widgetPaths.forEach((widgetPath) => {
+    const widgetMarkdown = `<iframe src="${widgetPath}" width="100%" height="680px"></iframe>`;
+    contentLines.push(`> ${widgetMarkdown}`);
+  });
+
+  if (contentLines.length === 0) {
+    return;
+  }
+
+  // Use a different callout type or add a class for errors if needed
+  let calloutType = isError ? 'ERROR' : 'OUTPUT';
+  let outputContent = `> [!${calloutType}]+ {#output-${uniqueId}}\n`;
+  outputContent += contentLines.join('\n') + '\n';
+  outputContent += '> \n';
+
+  let existingOutputStart = -1;
+  let existingOutputEnd = -1;
+  const totalLines = editor.lineCount();
+
+  for (let i = 0; i < totalLines; i++) {
+    const line = editor.getLine(i);
+    if (line.trim() === `> [!${calloutType}]+ {#output-${uniqueId}}`) {
+      existingOutputStart = i;
+      existingOutputEnd = i;
+      while (existingOutputEnd + 1 < totalLines) {
+        const nextLine = editor.getLine(existingOutputEnd + 1);
+        if (!nextLine.startsWith('> ') && nextLine.trim() !== '') {
+          break;
         }
-        break;
+        existingOutputEnd++;
       }
-    }
-  
-    if (existingOutputStart !== -1 && existingOutputEnd !== -1) {
-      const from = { line: existingOutputStart, ch: 0 };
-      const to = { line: existingOutputEnd + 1, ch: 0 };
-      editor.replaceRange(outputContent + '\n', from, to);
-    } else {
-      const insertPosition = { line: endLine + 1, ch: 0 };
-      editor.replaceRange('\n' + outputContent + '\n', insertPosition);
+      break;
     }
   }
-  
-  function removeOutputCallout(editor: Editor, uniqueId: string) {
+
+  if (existingOutputStart !== -1 && existingOutputEnd !== -1) {
+    const from = { line: existingOutputStart, ch: 0 };
+    const to = { line: existingOutputEnd + 1, ch: 0 };
+    editor.replaceRange(outputContent + '\n', from, to);
+  } else {
+    const insertPosition = { line: endLine + 1, ch: 0 };
+    editor.replaceRange('\n' + outputContent + '\n', insertPosition);
+  }
+}
+
+
+function removeOutputCallout(editor: Editor, uniqueId: string) {
     let existingOutputStart = -1;
     let existingOutputEnd = -1;
     const totalLines = editor.lineCount();
