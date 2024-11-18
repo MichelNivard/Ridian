@@ -1,19 +1,9 @@
 
 /* Additional Custom R Run Button Styles */
 
-body {
+body[ridian] {
 --file-line-width: 800px;
 }
-
-.readable.markdown-preview-view.is-readable-line-width .markdown-preview-sizer,
-.readable.is-live-preview.is-readable-line-width .cm-sizer,
-.readable.markdown-preview-view .markdown-preview-sizer,
-.readable.is-live-preview .cm-sizer {
-max-width: 800px; /* adjust according to preference */
-margin-left: auto;
-margin-right: auto;
-}
-
 
 .r-run-button {
   position: absolute;
@@ -26,8 +16,7 @@ margin-right: auto;
   background-color: #e0e0e0;
 }
 
-.HyperMD-codeblock.HyperMD-codeblock-bg.cm-line {
-    width: 800px;
+.HyperMD-codeblock.HyperMD-codeblock-bg.cm-line[ridian] {
     max-width: 800px !important
 }
 
@@ -43,7 +32,6 @@ margin-right: auto;
 .callout[data-callout="output"] {
   background-color: var(--background-primary);
   border-left: 3px solid var(--color-accent);
-    width: 800px;
     max-width: 800px;
 }
 

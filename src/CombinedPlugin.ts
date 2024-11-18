@@ -17,6 +17,8 @@ export default class CombinedPlugin extends Plugin {
 
   async onload() {
     console.log('Loading Combined Plugin');
+     // Apply wider code chunks
+    document.body.setAttribute('ridian', 'true');
 
     await this.loadSettings();
     setupPathEnvironment();
@@ -42,6 +44,8 @@ export default class CombinedPlugin extends Plugin {
 
   onunload() {
     console.log('Unloading Combined Plugin');
+    // Apply wider 
+    document.body.removeAttribute('ridian');
 
     this.floatingMenu.onUnload();
 
@@ -50,7 +54,6 @@ export default class CombinedPlugin extends Plugin {
     });
     this.rProcesses.clear();
 
-    this.detachViews();
 
     console.log('Combined Plugin unloaded successfully');
   }
@@ -237,7 +240,6 @@ export default class CombinedPlugin extends Plugin {
   // Method to run commands from the floating menu
   public  runCommand(commandId: string) {
     const fullCommandId = `ridian:${commandId}`;
-    console.log(`Executing command: ${fullCommandId}`);
     (this.app as any).commands.executeCommandById(fullCommandId);
     //(this.app as any).commands.executeCommandById(commandId);
      //this.app.commands.executeCommandById(commandId)

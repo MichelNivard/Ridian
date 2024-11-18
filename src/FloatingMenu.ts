@@ -1,6 +1,6 @@
 // src/FloatingMenu.ts
 
-import { Plugin, MarkdownView, setIcon } from 'obsidian';
+import { Plugin, MarkdownView, setIcon,setTooltip } from 'obsidian';
 import CombinedPlugin from './CombinedPlugin';
 
 export class FloatingMenu {
@@ -50,9 +50,9 @@ export class FloatingMenu {
     const strikethroughButton = this.createIconButton('strikethrough', () => this.plugin.applyWrapping('~~'), 'Strikethrough');
     const underlineButton = this.createIconButton('underline', () => this.plugin.applyHtmlTag('u'), 'Underline');
 
-    const alignLeftButton = this.createTextButton('align-left', '', () => this.plugin.applyAlignment('left'), 'Left Align');
-    const alignCenterButton = this.createTextButton('align-center', '', () => this.plugin.applyAlignment('center'), 'Center Align');
-    const alignRightButton = this.createTextButton('align-right', '', () => this.plugin.applyAlignment('right'), 'Right Align');
+    const alignLeftButton = this.createTextButton('align-left', '', () => this.plugin.applyAlignment('left'), 'Left align');
+    const alignCenterButton = this.createTextButton('align-center', '', () => this.plugin.applyAlignment('center'), 'Center align');
+    const alignRightButton = this.createTextButton('align-right', '', () => this.plugin.applyAlignment('right'), 'Right align');
     const alignJustifyButton = this.createTextButton('align-justify', '', () => this.plugin.applyAlignment('justify'), 'Justify');
 
     const h1Button = this.createIconButton('heading-1', () => this.plugin.applyHeading(1), 'Heading 1');
@@ -63,16 +63,16 @@ export class FloatingMenu {
 
     const runChunkButton = this.createTextButton(
       'play',
-      'Run Chunk',
+      'Run chunk',
       () => this.plugin.runCommand('run-current-code-chunk'),
-      'Run Current Code Chunk'
+      'Run current code chunk'
     );
 
     const exportNoteButton = this.createTextButton(
       'file-down',
       'Render/Quarto',
       () => this.plugin.runCommand('export-note-with-quarto'),
-      'Export Note with Quarto'
+      'Export note with Quarto'
     );
 
     // Apply styles if needed
@@ -108,7 +108,7 @@ export class FloatingMenu {
     button.className = 'floating-menu-button';
     setIcon(button, iconId);
     if (tooltip) {
-      button.setAttribute('aria-label', tooltip);
+      setTooltip(button, tooltip);
       button.setAttribute('title', tooltip);
     }
     button.addEventListener('click', onClick);
@@ -131,7 +131,7 @@ export class FloatingMenu {
     button.appendChild(textSpan);
 
     if (tooltip) {
-      button.setAttribute('aria-label', tooltip);
+      setTooltip(button, tooltip);
       button.setAttribute('title', tooltip);
     }
 

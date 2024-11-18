@@ -30,8 +30,6 @@ export class MyPluginSettingTab extends PluginSettingTab {
 
     containerEl.empty();
 
-    containerEl.createEl('h2', { text: 'R Integration Settings' });
-
     new Setting(containerEl)
       .setName('Path to R Executable')
       .setDesc('Specify the path to your R executable.')
@@ -42,7 +40,6 @@ export class MyPluginSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.rExecutablePath = value.trim();
             await this.plugin.saveSettings();
-            new Notice('R executable path updated successfully.');
           })
       );
 
@@ -56,7 +53,6 @@ export class MyPluginSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.rstudioPandocPath = value.trim();
             await this.plugin.saveSettings();
-            new Notice('RStudio Pandoc path updated successfully.');
           })
       );
 
@@ -70,7 +66,6 @@ export class MyPluginSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.quartoExecutablePath = value.trim();
             await this.plugin.saveSettings();
-            new Notice('Quarto executable path updated successfully.');
           })
       );
 
@@ -83,10 +78,8 @@ export class MyPluginSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
           if (value) {
             this.plugin.floatingMenu.onLoad();
-            new Notice('Floating Menu Enabled.');
           } else {
             this.plugin.floatingMenu.onUnload();
-            new Notice('Floating Menu Disabled.');
           }
         })
       );

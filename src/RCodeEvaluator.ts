@@ -443,9 +443,7 @@ cat("\\n${marker}\\n")
 
         if (isHelpRequest) {
           try {
-            console.log('Temporary Directory:', tempDir);
-            console.log('Help File Path:', tempHelpFilePath);
-            console.log('Help File Path for R:', tempHelpFilePathR);
+
 
 
             // Check if the help file exists

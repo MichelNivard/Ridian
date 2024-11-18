@@ -1,5 +1,5 @@
 // src/PathUtils.ts
-
+import { Platform } from "obsidian";
 import { execSync } from 'child_process';
 import * as process from 'process';
 import * as fs from 'fs';
@@ -8,11 +8,11 @@ import * as path from 'path';
 export function setupPathEnvironment() {
   process.env.PATH = getUserShellPath();
 
-  if (process.platform === 'darwin') {
+  if (Platform.isMacOS) {
     process.env.PATH += ':/usr/local/bin:/opt/homebrew/bin';
-  } else if (process.platform === 'linux') {
+  } else if (Platform.isLinux) {
     process.env.PATH += ':/usr/local/bin';
-  } else if (process.platform === 'win32') {
+  } else if (Platform.isWin) {
     // Windows-specific PATH setup
     const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
     const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
@@ -69,7 +69,7 @@ export function setupPathEnvironment() {
 
 
 function getUserShellPath(): string {
-  if (process.platform === 'win32') {
+  if (Platform.isWin) {
     // On Windows, use process.env.PATH directly
     return process.env.PATH || '';
   } else {
