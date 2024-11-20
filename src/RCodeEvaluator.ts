@@ -1,6 +1,6 @@
 // src/RCodeEvaluator.ts
 
-import { Editor, MarkdownView, Notice, TFile } from 'obsidian';
+import { Editor, MarkdownView, Notice, TFile, Platform } from 'obsidian';
 import CombinedPlugin from './CombinedPlugin';
 import { createHash } from 'crypto';
 import * as fs from 'fs';
@@ -214,8 +214,8 @@ async function runRCodeInSession(
     let output = '';
     let errorOutput = '';
 
-    const tempDir = await mkdtempAsync(path.join(process.platform === 'win32' ? 'C:\\Windows\\Temp\\' : '/tmp/', 'rplots-'));
-    const tempDirEscaped = process.platform === 'win32' ? tempDir.replace(/\\/g, '\\\\') : tempDir.replace(/\\/g, '/');
+    const tempDir = await mkdtempAsync(path.join(Platform.isWin ? 'C:\\Windows\\Temp\\' : '/tmp/', 'rplots-'));
+    const tempDirEscaped = Platform.isWin ? tempDir.replace(/\\/g, '\\\\') : tempDir.replace(/\\/g, '/');
 
     
         const tempHelpFilePath = path.join(tempDir, `help_${uniqueId}.html`);
