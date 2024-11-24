@@ -71,7 +71,7 @@ https://github.com/user-attachments/assets/334f7af5-0e71-4b9f-9ac8-672a734c91d8
 Here's a step-by-step guide to installing your Obsidian plugin, **Ridian**, using the BRAT (Beta Reviewers Auto-update Tool) plugin. This guide assumes you have Obsidian and BRAT already installed.
 
 
-R package Dependecies: In R/Rstudio Install: `evaluate`, `jsonlite` & `htmlwidgets` packages.
+R package Dependecies: In R/Rstudio Install: `languageserver`, `evaluate`, `jsonlite` & `htmlwidgets` packages.
 
 ---
 
