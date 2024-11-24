@@ -1,0 +1,10 @@
+/* css styles */
+
+table {
+    border-collapse: collapse !important;
+    border: none !important;
+}
+
+th, td {
+    border: none !important;
+}

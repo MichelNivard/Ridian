@@ -1,0 +1,23 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "This is idian:",
+    "section": "",
+    "text": "Combine Obsidian’s best in class markdown note taking, with the  programming language, for supercharged computational note taking.\n\n\n\n\n\n\n\nRun R code, in notes\nExecute R code within Obsidian on Mac, Windows or Linux.\n\n\n\n\n \n\n\n\n\n\n\n\n\nTooltips & Autocomplete\nCode with access to IDE like contextual support trough the languageserver R package.\n\n\n\n \n\n\n\n\n\n\n\nVisual Editing Toolbar\nBuild in controls for WYSIWYG markdown editing, code evaluation, and document rendering\n\n\n\n\n\n\n\n\n\n\n\n\n\nInsight into your R-environment\nA view the R environment associated with your current note enhances your awareness when using R in notes.\n\n\n\n\n\n\n\n\n\n\n\nGet help on R functions\nFull access to the amazing R documentation from within obsidian.\n\n\n\n\n\n\nQuarto file rendered within your Obsidian Vault\nNeed to share your notes with the world? No Problem Ridian has got you covered. Render notes with R code straight to HTML or PDF using QuartoPub"
+  },
+  {
+    "objectID": "about.html",
+    "href": "about.html",
+    "title": "The Developer",
+    "section": "",
+    "text": "I am Michel Nivard, Professor of Genetic Epidemiology at Bristol University. I develop Ridian on the weekends."
+  },
+  {
+    "objectID": "guide.html",
+    "href": "guide.html",
+    "title": "Setup & User Guide",
+    "section": "",
+    "text": "What is Ridian?\nRidian is a community plugin for Obsidian, arguably the very best markdown based note taking app. Ridian provides tools needed to run  code within Obsidian.\n\n\nInstall the plugin:\nYou can Install the plugin from the Obsidian plugin repository: https://obsidian.md/plugins?search=Ridian#\n\n\nR requirements for the plugin:\nIn R you must install the packages: languageserver, evaluate, jsonlite & htmlwidgets packages for the plugin to work.\n\n\nSetup the plugin:\nyou have to set up paths to R to use the plugin ( and optionally Quarto & pandoc to get more functionality):\n\nHow do you find the path to R? open up R and run: file.path(R.home(\"bin\"), \"R\") or on Windows try file.path(R.home(\"bin\"), \"R.exe\").\nSimilarly, you can use the following code in R to find oyur quarto and pandoc install:\nquarto::quarto_path()\nrmarkdown::find_pandoc()\nIf you have installed R studio pandoc and quarto should be available, if not you can find those software tools here:\nhttps://pandoc.org\nhttps://quarto.org\n\n\nCode chunk fence options\n\nUse R chunks with unfenced first line to comply with Obsidian markdown: ```r if you want r specific code highlighting. If you render to quarto using Ridian ,the fences will automatically be changed to: ```{r}. The quarto style fences will work, but they wont get code highlighting, Obsidian won’t recognize the code language properly.\nThe preferred code chunk style in Ridian is therefore:\n```r\n1 + 1\n```\n\n\nCode output management\n\nin Ridian code chunks MUST have a label, because output is presented as a custom callout type (&gt; [!OUTPUT]). The code finds an existing output callout based on the label,if you change the label, you’ll get new output. If you forget a label, one will be generated.\nIf you’d execute the code below\n```r\n#| label: sum123\n1 + 1\n```\nit would generate a labeled callout:\n\n[!OUTPUT]+ {#output-sum123}\n2"
+  }
+]
