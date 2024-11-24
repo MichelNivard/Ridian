@@ -8,6 +8,11 @@ literal programming with R notebooks, and Quarto rendering from within Obsidian:
 
 ![image](https://github.com/user-attachments/assets/bf0c2809-e231-40d9-a047-e28c9d7a12c2)
 
+**Check out he website:**
+
+Up to date info and install guide:
+[https://michelnivard.github.io/Ridian/]
+
 **What this is:**
 
 - A way to run R code in Obsidian
