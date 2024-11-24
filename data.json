@@ -1,5 +1,5 @@
 {
-  "rExecutablePath": "/usr/local/bin/R",
+  "rExecutablePath": "/Library/Frameworks/R.framework/Resources/bin/R",
   "rstudioPandocPath": "/opt/homebrew/bin/pandoc",
   "quartoExecutablePath": "/usr/local/bin/quarto",
   "enableFloatingMenu": true,

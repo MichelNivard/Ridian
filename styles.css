@@ -9,8 +9,8 @@ body[ridian] {
   position: absolute;
   top: 5px;
   right: 5px;
-  padding: 2px 8px;
-  font-size: 12px;
+  padding: 2px 6px;
+  font-size: 10px;
   cursor: pointer;
   border-radius: 4px;
   background-color: #e0e0e0;
@@ -97,7 +97,7 @@ img[alt*="right"] {
   display: flex;
   width: fit-content; /* Adjust width to fit content */
   margin: 0 auto; /* Center the menu bar within its parent */
-  padding: 5px 10px; /* Add padding around the buttons */
+  padding: 4px 8px; /* Add padding around the buttons */
   border-radius: 10px; /* Rounded corners for the menu bar */
   box-shadow: 0 8px 12px rgba(0, 0, 0, 0.1); /* Add subtle shadow */
 }
@@ -105,9 +105,9 @@ img[alt*="right"] {
 .floating-menu-button {
   color: var(--text-normal);
   border: 4px; 
-  padding: 8px 12px; /* Adjust padding for comfortable click area */
+  padding: 2px 6px; /* Adjust padding for comfortable click area */
   margin: 2px; 
-  border-radius: 10px; 
+  border-radius: 4px; 
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -118,8 +118,8 @@ img[alt*="right"] {
 
 /* Adjust icon size */
 .floating-menu-button svg {
-  width: 20px;
-  height: 20px;
+  width: 14px;
+  height: 14px;
 }
 
 /* Button spacing */
@@ -141,7 +141,7 @@ img[alt*="right"] {
 .floating-menu-button .button-text {
   font-family: 'Helvetica Neue', Arial, sans-serif;
   font-weight: 250; /* Thin font weight */
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1;
 }
 
@@ -420,4 +420,131 @@ img[alt*="right"] {
   padding: 0 1em;
   color: var(--text-muted);
   margin: 0 0 1em;
+}
+
+
+
+/* ==============================
+   Completion Dropdown Styles
+   ============================== */
+
+/* Container for Completion Dropdown */
+.completion-dropdown {
+  position: absolute;
+  z-index: 1000;
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 4px 0;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  transition: opacity 0.2s ease-in-out;
+}
+
+/* Individual Completion Item */
+.completion-item {
+  font-family: monospace;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 200;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Highlighted (Selected) Completion Item */
+.completion-item.is-selected {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-selection);
+}
+
+/* ==============================
+ Signature Help Dropdown Styles
+ ============================== */
+
+/* Container for Signature Help Dropdown */
+.signature-help-dropdown {
+  position: absolute;
+  z-index: 1000;
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 4px;
+  max-width:500px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  font-family: monospace;
+  font-size: 10px;
+  white-space: pre-wrap;
+
+}
+
+/* Signature Label (Function Name) */
+.signature-label {
+  font-family: monospace;
+  font-weight: 400;
+  margin-bottom: 4px;
+  white-space: pre-wrap;
+}
+
+/* Signature Documentation (Description) */
+.signature-value {
+  font-family: inherit;
+  color: var(--text-muted);
+  font-family: monospace;
+  font-weight: 200;
+  white-space: pre-wrap;
+}
+
+/* ==============================
+ Common Dropdown Styles
+ ============================== */
+
+/* Smooth Transition for Dropdown Appearance */
+.completion-dropdown,
+.signature-help-dropdown {
+  opacity: 0;
+  animation: fadeIn 0.2s forwards;
+}
+
+/* Fade In Animation */
+@keyframes fadeIn {
+  to {
+      opacity: 1;
+  }
+}
+
+/* Hover Effect for Dropdown Items */
+.completion-item:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+/* Scrollbar Styling (Optional for Better Aesthetics) */
+.completion-dropdown::-webkit-scrollbar,
+.signature-help-dropdown::-webkit-scrollbar {
+  width: 8px;
+}
+
+.completion-dropdown::-webkit-scrollbar-track,
+.signature-help-dropdown::-webkit-scrollbar-track {
+  background: var(--background-secondary);
+  border-radius: 4px;
+}
+
+.completion-dropdown::-webkit-scrollbar-thumb,
+.signature-help-dropdown::-webkit-scrollbar-thumb {
+  background-color: var(--background-modifier-border);
+  border-radius: 4px;
+}
+
+/* Responsive Positioning Adjustments */
+@media (max-width: 600px) {
+  .completion-dropdown,
+  .signature-help-dropdown {
+      max-width: 90%;
+      left: 5%;
+      right: 5%;
+  }
 }
