@@ -21,7 +21,16 @@ export async function exportNoteWithQuarto(plugin: CombinedPlugin) {
     content = stripOutputCallouts(content);
     content = replaceCodeFenceMarkers(content);
 
+    // Convert image links and collect image paths
+    const { content: newContent, imagePaths } = convertImageLinks(content);
+    content = newContent;
+
     const exportFilePath = await savePreparedNote(plugin, content, activeFile.path);
+
+    // Copy image files to the export directory
+    const exportFolderPath = path.dirname(exportFilePath);
+    await copyImageFiles(plugin, imagePaths, exportFolderPath);
+
     await renderWithQuarto(plugin, exportFilePath);
 
     new Notice('Note exported and rendered with Quarto successfully.');
@@ -30,6 +39,7 @@ export async function exportNoteWithQuarto(plugin: CombinedPlugin) {
     new Notice('Failed to export note with Quarto.');
   }
 }
+
 
 function addFrontMatter(content: string, activeFile: TFile): string {
   if (content.startsWith('---\n')) {
@@ -151,4 +161,43 @@ async function renderWithQuarto(plugin: CombinedPlugin, exportFilePath: string) 
       }
     });
   });
+}
+
+
+function convertImageLinks(content: string): { content: string; imagePaths: Set<string> } {
+  const imageLinkRegex = /!\[\[([^\]]+)\]\]/g;
+  const imagePaths = new Set<string>();
+
+  const newContent = content.replace(imageLinkRegex, (match, p1) => {
+    // Split the content inside the brackets on the '|' character
+    const [imagePath, altText] = p1.split('|');
+    const imageFileName = path.basename(imagePath);
+    imagePaths.add(imagePath.trim());
+
+    return `![${altText ? altText.trim() : imageFileName}](${imageFileName})`;
+  });
+
+  return { content: newContent, imagePaths };
+}
+
+
+async function copyImageFiles(plugin: CombinedPlugin, imagePaths: Set<string>, exportFolderPath: string) {
+  const adapter = plugin.app.vault.adapter;
+  if (!(adapter instanceof FileSystemAdapter)) {
+    throw new Error('Vault adapter is not a FileSystemAdapter.');
+  }
+  const basePath = adapter.getBasePath();
+
+  for (const imagePath of imagePaths) {
+    const fullImagePath = path.join(basePath, imagePath);
+    const imageFileName = path.basename(imagePath);
+    const destImagePath = path.join(exportFolderPath, imageFileName);
+
+    try {
+      await fs.promises.copyFile(fullImagePath, destImagePath);
+    } catch (err) {
+      console.error(`Failed to copy image ${imagePath} to ${destImagePath}:`, err);
+      new Notice(`Failed to copy image ${imagePath}.`);
+    }
+  }
 }

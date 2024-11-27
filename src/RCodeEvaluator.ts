@@ -68,13 +68,14 @@ export async function runCurrentCodeChunk(plugin: CombinedPlugin, editor: Editor
   }
 }
 
-function getCurrentCodeChunk(
+export function getCurrentCodeChunk(
   editor: Editor,
   cursorLine: number
 ): {
   startLine: number;
   endLine: number;
   code: string;
+  codeWithAll: string;
   existingLabel: string | null;
   options: { [key: string]: string };
 } {
@@ -89,7 +90,7 @@ function getCurrentCodeChunk(
   }
 
   if (startLine < 0) {
-    return { startLine: -1, endLine: -1, code: '', existingLabel: null, options: {} };
+    return { startLine: -1, endLine: -1, code: '',codeWithAll: '', existingLabel: null, options: {} };
   }
 
   endLine = startLine + 1;
@@ -98,22 +99,25 @@ function getCurrentCodeChunk(
   }
 
   if (endLine >= totalLines) {
-    return { startLine: -1, endLine: -1, code: '', existingLabel: null, options: {} };
+    return { startLine: -1, endLine: -1, code: '',codeWithAll:'', existingLabel: null, options: {} };
   }
 
   existingLabel = parseChunkLabel(editor, startLine);
   options = parseChunkOptions(editor, startLine);
 
   const codeLines = [];
+  const codeLinesWithAll = [];
   for (let i = startLine + 1; i < endLine; i++) {
     const line = editor.getLine(i);
+    codeLinesWithAll.push(line);
     if (!line.trim().startsWith('#|')) {
       codeLines.push(line);
     }
   }
   const code = codeLines.join('\n');
+  const codeWithAll = codeLinesWithAll.join('\n');
 
-  return { startLine, endLine, code, existingLabel, options };
+  return { startLine, endLine, code, codeWithAll, existingLabel, options };
 }
 
 function isCodeChunkStart(line: string): boolean {

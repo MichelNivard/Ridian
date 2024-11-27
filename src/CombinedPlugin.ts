@@ -1,23 +1,78 @@
 // src/CombinedPlugin.ts
 
-import { App, Plugin, MarkdownView, Notice, TFile } from 'obsidian';
-import { spawn, ChildProcessWithoutNullStreams } from 'child_process'
+import {
+  App,
+  Plugin,
+  MarkdownView,
+  Notice,
+  Editor,
+  EditorPosition,
+} from 'obsidian';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { FloatingMenu } from './FloatingMenu';
 import { REnvironmentView, VIEW_TYPE_R_ENVIRONMENT } from './REnvironmentView';
 import { RHelpView, VIEW_TYPE_R_HELP } from './RHelpView';
-import { MyPluginSettingTab, CombinedPluginSettings, DEFAULT_SETTINGS } from './SettingsTab';
-import { runCurrentCodeChunk,} from './RCodeEvaluator';
+import {
+  MyPluginSettingTab,
+  CombinedPluginSettings,
+  DEFAULT_SETTINGS,
+} from './SettingsTab';
+import { runCurrentCodeChunk, getCurrentCodeChunk } from './RCodeEvaluator';
 import { exportNoteWithQuarto } from './ExportHandler';
 import { setupPathEnvironment } from './PathUtils';
+import { RLanguageServer } from './RLanguageServer';
+import { SignatureHelpDropdown } from './SignatureHelpDropdown';
+import { CompletionDropdown } from './modal';
+import { EditorView, ViewUpdate } from '@codemirror/view';
+import { spawn, ChildProcessWithoutNullStreams } from 'child_process'
+import {
+  autocompletion,
+  Completion,
+  CompletionSource,
+  startCompletion,
+  CompletionContext,
+} from '@codemirror/autocomplete';
+
+
+
+
 
 export default class CombinedPlugin extends Plugin {
   settings: CombinedPluginSettings;
   floatingMenu: FloatingMenu;
   rProcesses: Map<string, ChildProcessWithoutNullStreams> = new Map();
+  private rLanguageServer: RLanguageServer;
+  private _documentId = 1;
+  private isInsertingCompletion: boolean = false;
+  private currentCompletions: Completion[] = [];
+  private currentDropdown: CompletionDropdown | null = null;
+  private signatureHelpDropdown: SignatureHelpDropdown | null = null;
+
+  private completionSource: CompletionSource = (context: CompletionContext) => {
+    console.log('completionSource called, context:', context);
+  
+    if (this.currentCompletions.length === 0) {
+      return null;
+    }
+  
+    const word = context.matchBefore(/\w*/);
+    if (!word || (word.from === word.to && context.explicit === false)) {
+      return null;
+    }
+  
+    return {
+      from: word.from,
+      to: context.pos,
+      options: this.currentCompletions,
+    };
+  };
+  
 
   async onload() {
     console.log('Loading Combined Plugin');
-     // Apply wider code chunks
+    // Apply wider code chunks
     document.body.setAttribute('ridian', 'true');
 
     await this.loadSettings();
@@ -39,21 +94,29 @@ export default class CombinedPlugin extends Plugin {
 
     this.registerCommands();
 
+    const rExecutablePath = this.settings.rExecutablePath.trim() || '/usr/local/bin/R';
+
+    this.rLanguageServer = new RLanguageServer(
+      rExecutablePath,
+      this.handleCompletion.bind(this),
+      this.handleHover.bind(this)
+    );
+    this.rLanguageServer.start();
+
+    // Register editor events
+    this.registerEditorEvents();
+
     console.log('Combined Plugin loaded successfully');
   }
 
   onunload() {
     console.log('Unloading Combined Plugin');
-    // Apply wider 
+    // Remove wider code chunks
     document.body.removeAttribute('ridian');
 
     this.floatingMenu.onUnload();
 
-    this.rProcesses.forEach((rProcess) => {
-      rProcess.kill();
-    });
-    this.rProcesses.clear();
-
+    this.rLanguageServer.stop();
 
     console.log('Combined Plugin unloaded successfully');
   }
@@ -77,23 +140,17 @@ export default class CombinedPlugin extends Plugin {
         });
       }
     }
-  
+
     // Initialize R Help View
     if (this.app.workspace.getLeavesOfType(VIEW_TYPE_R_HELP).length === 0) {
       const leaf = this.app.workspace.getRightLeaf(true);
       if (leaf) {
         leaf.setViewState({
-          type: VIEW_TYPE_R_HELP,
-          active: true,
+            type: VIEW_TYPE_R_HELP,
+            active: true,
         });
       }
     }
-  }
-  
-
-  private detachViews() {
-    this.app.workspace.getLeavesOfType(VIEW_TYPE_R_ENVIRONMENT).forEach((leaf) => leaf.detach());
-    this.app.workspace.getLeavesOfType(VIEW_TYPE_R_HELP).forEach((leaf) => leaf.detach());
   }
 
   private registerCommands() {
@@ -121,6 +178,307 @@ export default class CombinedPlugin extends Plugin {
       callback: () => exportNoteWithQuarto(this),
     });
   }
+
+  // Register editor events for cursor activity
+  private registerEditorEvents() {
+    // Handle cursor activity
+    this.registerEditorExtension(
+      EditorView.updateListener.of((update: ViewUpdate) => {
+        const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (!activeView || !activeView.editor) {
+          return;
+        }
+
+        const editor = activeView.editor;
+
+        if (update.selectionSet) {
+          this.handleCursorActivity(editor);
+        }
+      })
+    );
+  }
+
+
+
+  private nextDocumentId(): number {
+    return this._documentId++;
+  }
+
+  
+  private handleCompletion(items: any[]) {
+    console.log('handleCompletion called with items:', items);
+  
+    if (items.length === 0) {
+      if (this.currentDropdown) {
+        console.log('No completions available. Closing existing dropdown.');
+        this.currentDropdown.close();
+        this.currentDropdown = null;
+      }
+      return;
+    }
+
+    const completions: Completion[] = items.map((item: any) => {
+      const label = item.label || '';
+      const insertText = item.textEdit?.newText || item.insertText || label;
+      const detail = item.detail || '';
+      const info =
+        typeof item.documentation === 'string'
+          ? item.documentation
+          : item.documentation?.value || undefined;
+  
+      return {
+        label,
+        insertText,
+        detail,
+        info,
+      };
+    });
+  
+    this.currentCompletions = completions;
+  
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!activeView) return;
+  
+    const editor = activeView.editor;
+  
+    // Show the completion dropdown
+    this.showCompletionDropdown(editor);
+  }
+
+  
+  private handleHover(contents: string) {
+    // Update the editor with hover information (tooltips)
+    console.log('Hover contents:', contents);
+    // Implement logic to display hover information in the editor
+  }
+
+ private showCompletionDropdown(editor: Editor) {
+  if (!this.currentCompletions || this.currentCompletions.length === 0) {
+    return;
+  }
+
+  // Close any existing dropdown
+  if (this.currentDropdown) {
+    this.currentDropdown.close();
+  }
+
+  // Create a new dropdown and store the reference
+  this.currentDropdown = new CompletionDropdown(this.app, editor, this.currentCompletions, (completion) => {
+    const textToInsert = (completion as any).insertText || completion.label;
+    this.insertCompletionAtCursor(editor, textToInsert);
+    // After inserting, close the dropdown
+    if (this.currentDropdown) {
+      this.currentDropdown.close();
+      this.currentDropdown = null;
+    }
+  });
+}
+
+private insertCompletionAtCursor(editor: Editor, text: string) {
+  this.isInsertingCompletion = true; // Start insertion
+
+  const cursor = editor.getCursor();
+  const line = editor.getLine(cursor.line);
+  
+  // Updated regex to include dots for R function names
+  const wordStart = line.slice(0, cursor.ch).match(/[\w.]*$/)?.[0] || '';
+  const wordEnd = line.slice(cursor.ch).match(/^[\w.]*/)?.[0] || '';
+  
+  const from = { line: cursor.line, ch: cursor.ch - wordStart.length };
+  const to = { line: cursor.line, ch: cursor.ch + wordEnd.length };
+  
+  editor.replaceRange(text, from, to);
+  editor.setCursor({ line: cursor.line, ch: from.ch + text.length });
+
+  this.isInsertingCompletion = false; // End insertion
+}
+
+/// this.currentDropdown.close();
+
+// src/CombinedPlugin.ts
+private handleCursorActivity(editor: Editor) {
+  if (this.isInsertingCompletion) {
+      return; // Skip handling cursor activity during insertion
+  }
+
+  const cursor = editor.getCursor();
+  const line = editor.getLine(cursor.line);
+  const beforeCursor = line.slice(0, cursor.ch);
+
+  // Regex to check if the cursor is inside a function call (e.g., lm(|))
+  const functionCallMatch = beforeCursor.match(/(\w+)\([^)]*$/);
+
+  if (functionCallMatch) {
+      // Cursor is inside a function call
+
+      // Close the Completion Dropdown if it's open
+      if (this.currentDropdown) {
+          console.log('Inside function call. Closing Completion Dropdown.');
+          this.currentDropdown.close();
+          this.currentDropdown = null;
+      }
+
+      // Proceed to show Signature Help Dropdown
+      this.showSignatureHelp(editor, cursor);
+  } else {
+      // Cursor is outside a function call
+
+      // Close the Signature Help Dropdown if it's open
+      if (this.signatureHelpDropdown) {
+          console.log('Outside function call. Closing Signature Help Dropdown.');
+          this.signatureHelpDropdown.close();
+          this.signatureHelpDropdown = null;
+      }
+
+      // Proceed to show Completion Dropdown
+      this.showCompletion(editor, cursor);
+  }
+}
+
+private showSignatureHelp(editor: Editor, cursor: EditorPosition) {
+  const { codeWithAll, startLine } = getCurrentCodeChunk(editor, cursor.line);
+
+  if (!codeWithAll) {
+      console.log('No code chunk found. Closing Signature Help Dropdown.');
+      this.closeSignatureHelpDropdown();
+      return;
+  }
+
+  // Write code chunk to a temporary file
+  const tempDir = os.tmpdir();
+  const tempFileName = `obsidian-virtual-document-${this.nextDocumentId()}.r`;
+  const tempFilePath = path.join(tempDir, tempFileName);
+  fs.writeFileSync(tempFilePath, codeWithAll);
+
+  const virtualUri = `file://${tempFilePath.replace(/\\/g, '/')}`; // Replace backslashes on Windows
+  const languageId = 'r';
+  const version = 1;
+
+  // Adjust the cursor position relative to the code chunk
+  const position = {
+      line: cursor.line - (startLine + 1), // Adjusted line number
+      character: cursor.ch,
+  };
+
+  // Log the uri and position
+  console.log('Virtual URI:', virtualUri);
+  console.log('Cursor position:', position);
+
+  // Send didOpen notification for the code chunk
+  this.rLanguageServer.sendNotification('textDocument/didOpen', {
+      textDocument: {
+          uri: virtualUri,
+          languageId: languageId,
+          version: version,
+          text: codeWithAll,
+      },
+  });
+
+  // Send signature help request with a response handler
+  this.rLanguageServer.sendSignatureHelpRequest(
+      virtualUri,
+      position,
+      (response) => {
+          if (response.result) {
+              this.handleSignatureHelp(response.result);
+          } else {
+              console.error('Unexpected signatureHelp response:', response);
+              this.closeSignatureHelpDropdown();
+          }
+      }
+  );
+}
+
+private showCompletion(editor: Editor, cursor: EditorPosition) {
+  const { codeWithAll, startLine } = getCurrentCodeChunk(editor, cursor.line);
+
+  if (!codeWithAll) {
+      console.log('No code chunk found. Closing Completion Dropdown.');
+      if (this.currentDropdown) {
+        console.log('No code chunk found. Closing existing dropdown.');
+        this.currentDropdown.close();
+        this.currentDropdown = null;
+      }
+      return;
+  }
+
+  // Write code chunk to a temporary file
+  const tempDir = os.tmpdir();
+  const tempFileName = `obsidian-virtual-document-${this.nextDocumentId()}.r`;
+  const tempFilePath = path.join(tempDir, tempFileName);
+  fs.writeFileSync(tempFilePath, codeWithAll);
+
+  const virtualUri = `file://${tempFilePath.replace(/\\/g, '/')}`; // Replace backslashes on Windows
+  const languageId = 'r';
+  const version = 1;
+
+  // Adjust the cursor position relative to the code chunk
+  const position = {
+      line: cursor.line - (startLine + 1), // Adjusted line number
+      character: cursor.ch,
+  };
+
+  // Log the uri and position
+  console.log('Virtual URI:', virtualUri);
+  console.log('Cursor position:', position);
+
+  // Send didOpen notification for the code chunk
+  this.rLanguageServer.sendNotification('textDocument/didOpen', {
+      textDocument: {
+          uri: virtualUri,
+          languageId: languageId,
+          version: version,
+          text: codeWithAll,
+      },
+  });
+
+  // Send completion request with a response handler
+  this.rLanguageServer.sendRequest(
+      'textDocument/completion',
+      {
+          textDocument: { uri: virtualUri },
+          position: position,
+          context: { triggerKind: 1 },
+      },
+      (response) => {
+          if (response.result && response.result.items) {
+              this.handleCompletion(response.result.items);
+          } else {
+              console.error('Unexpected completion response:', response);
+          }
+      }
+  );
+}
+
+
+private handleSignatureHelp(result: any) {
+  if (!result || !result.signatures || result.signatures.length === 0) {
+    this.closeSignatureHelpDropdown();
+    return;
+  }
+
+  const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+  if (!activeView) return;
+
+  const editor = activeView.editor;
+
+  if (this.signatureHelpDropdown) {
+    this.signatureHelpDropdown.updateContent(result.signatures);
+  } else {
+    this.signatureHelpDropdown = new SignatureHelpDropdown(this.app, editor, result.signatures, () => {
+      this.signatureHelpDropdown = null;
+    });
+  }
+}
+
+private closeSignatureHelpDropdown() {
+  if (this.signatureHelpDropdown) {
+    this.signatureHelpDropdown.close();
+    this.signatureHelpDropdown = null;
+  }
+}
+
+
 
   // Utility methods for text formatting in the editor
 
@@ -238,11 +596,8 @@ export default class CombinedPlugin extends Plugin {
   }
 
   // Method to run commands from the floating menu
-  public  runCommand(commandId: string) {
+  public runCommand(commandId: string) {
     const fullCommandId = `ridian:${commandId}`;
     (this.app as any).commands.executeCommandById(fullCommandId);
-    //(this.app as any).commands.executeCommandById(commandId);
-     //this.app.commands.executeCommandById(commandId)
-     
   }
 }
