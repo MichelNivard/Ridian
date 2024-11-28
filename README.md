@@ -126,6 +126,7 @@ In R/Rstudio Install:
 install.packages(evaluate)
 install.packages(jsonlite)
 install.packages(htmlwidgets)
+install.packages(languageserver)
 ```
 
 In the **Ridian** settings provide the path to your R installation, which can for example be:
