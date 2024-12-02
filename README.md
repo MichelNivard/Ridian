@@ -10,8 +10,8 @@ literal programming with R notebooks, and Quarto rendering from within Obsidian:
 
 **Check out he website:**
 
-Up to date info and install guide:
-[https://michelnivard.github.io/Ridian/]
+
+[Up to date info and install guide on the Ridian website](https://michelnivard.github.io/Ridian/)
 
 **What this is:**
 
