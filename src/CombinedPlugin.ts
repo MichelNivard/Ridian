@@ -206,7 +206,7 @@ export default class CombinedPlugin extends Plugin {
 
   
   private handleCompletion(items: any[]) {
-    console.log('handleCompletion called with items:', items);
+    
   
     if (items.length === 0) {
       if (this.currentDropdown) {
@@ -313,7 +313,7 @@ private handleCursorActivity(editor: Editor) {
 
       // Close the Completion Dropdown if it's open
       if (this.currentDropdown) {
-          console.log('Inside function call. Closing Completion Dropdown.');
+-
           this.currentDropdown.close();
           this.currentDropdown = null;
       }
@@ -325,7 +325,7 @@ private handleCursorActivity(editor: Editor) {
 
       // Close the Signature Help Dropdown if it's open
       if (this.signatureHelpDropdown) {
-          console.log('Outside function call. Closing Signature Help Dropdown.');
+ -
           this.signatureHelpDropdown.close();
           this.signatureHelpDropdown = null;
       }
@@ -339,7 +339,6 @@ private showSignatureHelp(editor: Editor, cursor: EditorPosition) {
   const { codeWithAll, startLine } = getCurrentCodeChunk(editor, cursor.line);
 
   if (!codeWithAll) {
-      console.log('No code chunk found. Closing Signature Help Dropdown.');
       this.closeSignatureHelpDropdown();
       return;
   }
@@ -361,8 +360,6 @@ private showSignatureHelp(editor: Editor, cursor: EditorPosition) {
   };
 
   // Log the uri and position
-  console.log('Virtual URI:', virtualUri);
-  console.log('Cursor position:', position);
 
   // Send didOpen notification for the code chunk
   this.rLanguageServer.sendNotification('textDocument/didOpen', {
@@ -393,9 +390,9 @@ private showCompletion(editor: Editor, cursor: EditorPosition) {
   const { codeWithAll, startLine } = getCurrentCodeChunk(editor, cursor.line);
 
   if (!codeWithAll) {
-      console.log('No code chunk found. Closing Completion Dropdown.');
+
       if (this.currentDropdown) {
-        console.log('No code chunk found. Closing existing dropdown.');
+
         this.currentDropdown.close();
         this.currentDropdown = null;
       }
@@ -418,9 +415,7 @@ private showCompletion(editor: Editor, cursor: EditorPosition) {
       character: cursor.ch,
   };
 
-  // Log the uri and position
-  console.log('Virtual URI:', virtualUri);
-  console.log('Cursor position:', position);
+
 
   // Send didOpen notification for the code chunk
   this.rLanguageServer.sendNotification('textDocument/didOpen', {

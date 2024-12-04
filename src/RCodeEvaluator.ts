@@ -640,10 +640,10 @@ options(device = function(...) jpeg(filename = tempfile(), width=800, height=600
   return rProcess;
 }
 
-
 function escapeMarkdown(text: string): string {
-  return text.replace(/([\\`*_{}[\]()#+\-!>|])/g, '\\$1');
+  return text.replace(/([\\`*_{}[\]()#+\-!>|])/g, '\u200b$1');
 }
+
 
 function insertOutputWithCallout(
   editor: Editor,
@@ -653,12 +653,12 @@ function insertOutputWithCallout(
   widgetPaths: string[],
   uniqueId: string,
   options: { [key: string]: string },
-  isError: boolean = false // Optional parameter to style errors differently
+  isError: boolean = false
 ) {
   const contentLines: string[] = [];
-
+  const contentLines2: string[] = [];
+  
   if (output && output.trim() !== '') {
-    // Escape markdown special characters in the output
     const escapedOutput = escapeMarkdown(output.trim());
     const outputLines = escapedOutput.split('\n').map((line) => '> ' + line);
     contentLines.push(...outputLines);
@@ -667,23 +667,31 @@ function insertOutputWithCallout(
   imagePaths.forEach((imagePath) => {
     const vaultImagePath = `${imagePath}`;
     const imageMarkdown = `![center|480](${vaultImagePath})`;
-    contentLines.push(`> ${imageMarkdown}`);
+    contentLines2.push(`> ${imageMarkdown}`);
   });
 
   widgetPaths.forEach((widgetPath) => {
     const widgetMarkdown = `<iframe src="${widgetPath}" width="100%" height="680px"></iframe>`;
-    contentLines.push(`> ${widgetMarkdown}`);
+    contentLines2.push(`> ${widgetMarkdown}`);
   });
 
-  if (contentLines.length === 0) {
+  if (contentLines.length === 0 && contentLines2.length === 0) {
     return;
   }
 
-  // Use a different callout type or add a class for errors if needed
-  let calloutType = isError ? 'ERROR' : 'OUTPUT';
-  let outputContent = `> [!${calloutType}]+ {#output-${uniqueId}}\n`;
+  const calloutType = isError ? 'ERROR' : 'OUTPUT';
+  const calloutTitle = `> [!${calloutType}]+ {#output-${uniqueId}}`;
+  
+  let outputContent = `${calloutTitle}\n`;
+  if (contentLines.length !== 0) {
+    outputContent += '> \`\`\`\n';
   outputContent += contentLines.join('\n') + '\n';
+  outputContent += '> \`\`\`\n';
+  } 
+  if (contentLines2.length !== 0) {
+  outputContent += contentLines2.join('\n') + '\n';
   outputContent += '> \n';
+  }
 
   let existingOutputStart = -1;
   let existingOutputEnd = -1;
@@ -691,15 +699,16 @@ function insertOutputWithCallout(
 
   for (let i = 0; i < totalLines; i++) {
     const line = editor.getLine(i);
-    if (line.trim() === `> [!${calloutType}]+ {#output-${uniqueId}}`) {
+    if (line.trim().startsWith(`> [!${calloutType}]`) && line.includes(`{#output-${uniqueId}}`)) {
       existingOutputStart = i;
       existingOutputEnd = i;
       while (existingOutputEnd + 1 < totalLines) {
         const nextLine = editor.getLine(existingOutputEnd + 1);
-        if (!nextLine.startsWith('> ') && nextLine.trim() !== '') {
+        if (nextLine.trim() === '' || nextLine.startsWith('> ')) {
+          existingOutputEnd++;
+        } else {
           break;
         }
-        existingOutputEnd++;
       }
       break;
     }
@@ -714,6 +723,7 @@ function insertOutputWithCallout(
     editor.replaceRange('\n' + outputContent + '\n', insertPosition);
   }
 }
+
 
 
 function removeOutputCallout(editor: Editor, uniqueId: string) {
