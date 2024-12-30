@@ -82,10 +82,10 @@ R package Dependecies: In R/Rstudio Install: `languageserver`, `evaluate`, `json
 In R/Rstudio Install:
 
 ```r
-install.packages(evaluate)
-install.packages(jsonlite)
-install.packages(htmlwidgets)
-install.packages(languageserver)
+install.packages("evaluate")
+install.packages("jsonlite")
+install.packages("htmlwidgets")
+install.packages("languageserver")
 ```
 
 In the **Ridian** settings provide the path to your R installation, which can for example be:
