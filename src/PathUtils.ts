@@ -9,9 +9,9 @@ export function setupPathEnvironment() {
   process.env.PATH = getUserShellPath();
 
   if (Platform.isMacOS) {
-    process.env.PATH += ':/usr/local/bin:/opt/homebrew/bin';
+    process.env.PATH += ':/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin';
   } else if (Platform.isLinux) {
-    process.env.PATH += ':/usr/local/bin';
+    process.env.PATH += ':/usr/local/bin:/usr/bin:/bin:/snap/bin:/var/lib/flatpak/exports/bin';
   } else if (Platform.isWin) {
     // Windows-specific PATH setup
     const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
@@ -38,6 +38,10 @@ export function setupPathEnvironment() {
 
           versions.forEach((version) => {
             const binPath = path.join(rDir, version, 'bin');
+            const x64BinPath = path.join(binPath, 'x64');
+            if (fs.existsSync(x64BinPath)) {
+              rPaths.push(x64BinPath);
+            }
             if (fs.existsSync(binPath)) {
               rPaths.push(binPath);
             }

@@ -1,103 +1,100 @@
-// src/RLanguageServer.ts
-
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
-import * as readline from 'readline';
 
 export class RLanguageServer {
   private process: ChildProcessWithoutNullStreams | null = null;
-  private onCompletion: (items: any[]) => void;
-  private onHover: (contents: string) => void;
   private rExecutablePath: string;
-  private _buffer: string = '';
-  private _requestId = 1;
-  private _responseHandlers: Map<number, (response: any) => void> = new Map();
+  private buffer: Buffer = Buffer.alloc(0);
+  private requestId = 1;
+  private responseHandlers: Map<number, (response: any) => void> = new Map();
+  private nextMessageLength: number | null = null;
 
-  constructor(
-    rExecutablePath: string,
-    onCompletion: (items: any[]) => void,
-    onHover: (contents: string) => void
-  ) {
+  constructor(rExecutablePath: string) {
     this.rExecutablePath = rExecutablePath;
-    this.onCompletion = onCompletion;
-    this.onHover = onHover;
   }
 
   start() {
-    this.process = spawn(this.rExecutablePath, ['--slave', '-e', 'languageserver::run()']);
+    if (this.process) {
+      this.stop();
+    }
 
-    this._buffer = '';
+    this.process = spawn(this.rExecutablePath, ['--slave', '-e', 'languageserver::run()'], {
+      stdio: 'pipe',
+    });
+    this.buffer = Buffer.alloc(0);
+    this.nextMessageLength = null;
 
-    this.process.stdout.on('data', (data) => {
-      this._buffer += data.toString();
+    this.process.stdout.on('data', (data: Buffer) => {
+      this.buffer = Buffer.concat([this.buffer, data]);
       this.parseMessages();
     });
-    
-    // Send initialize request
+
+    this.process.stderr.on('data', (data: Buffer) => {
+      const message = data.toString('utf8').trim();
+      if (message.length > 0) {
+        console.error('R language server stderr:', message);
+      }
+    });
+
+    this.process.on('error', (error) => {
+      console.error('Failed to start R language server:', error);
+    });
+
+    this.process.on('exit', () => {
+      this.process = null;
+      this.buffer = Buffer.alloc(0);
+      this.nextMessageLength = null;
+      this.responseHandlers.clear();
+    });
+
     this.initialize();
   }
 
   stop() {
-    if (this.process) {
-      this.process.kill();
-      this.process = null;
+    if (!this.process) {
+      return;
     }
+
+    this.process.removeAllListeners();
+    this.process.stdout.removeAllListeners();
+    this.process.stderr.removeAllListeners();
+    this.process.kill();
+    this.process = null;
+    this.buffer = Buffer.alloc(0);
+    this.nextMessageLength = null;
+    this.responseHandlers.clear();
   }
 
-  private initialize() {
-    const params = {
-      processId: process.pid,
-      rootUri: null,
-      capabilities: {},
-    };
-
-    // Send the 'initialize' request and handle the response via sendRequest
-    this.sendRequest('initialize', params, (response) => {
-        this.sendNotification('initialized', {});
-      });
-  }
-
-
- public sendRequest(
-    method: string,
-    params: any,
-    handler?: (response: any) => void
-  ) {
-    if (this.process) {
-      const requestId = this.nextRequestId();
-      const request = {
-        jsonrpc: '2.0',
-        id: requestId,
-        method: method,
-        params: params,
-      };
-  
-      if (handler) {
-        this._responseHandlers.set(requestId, handler);
-      }
-  
-      const jsonRequest = JSON.stringify(request);
-      const contentLength = Buffer.byteLength(jsonRequest, 'utf8');
-      const message = `Content-Length: ${contentLength}\r\n\r\n${jsonRequest}`;
-  
-      this.process.stdin.write(message);
+  sendRequest(method: string, params: any, handler?: (response: any) => void) {
+    if (!this.process) {
+      return;
     }
-  }
 
-public sendNotification(method: string, params: any) {
-  if (this.process) {
-    const notification = {
+    const currentRequestId = this.requestId++;
+    const request = {
       jsonrpc: '2.0',
-      method: method,
-      params: params,
+      id: currentRequestId,
+      method,
+      params,
     };
 
-    const jsonNotification = JSON.stringify(notification);
-    const contentLength = Buffer.byteLength(jsonNotification, 'utf8');
-    const message = `Content-Length: ${contentLength}\r\n\r\n${jsonNotification}`;
+    if (handler) {
+      this.responseHandlers.set(currentRequestId, handler);
+    }
 
-    this.process.stdin.write(message);
+    this.writeMessage(request);
   }
-        }
+
+  sendNotification(method: string, params: any) {
+    if (!this.process) {
+      return;
+    }
+
+    this.writeMessage({
+      jsonrpc: '2.0',
+      method,
+      params,
+    });
+  }
 
   public sendSignatureHelpRequest(
     uri: string,
@@ -114,65 +111,91 @@ public sendNotification(method: string, params: any) {
     );
   }
 
+  private initialize() {
+    this.sendRequest(
+      'initialize',
+      {
+        processId: process.pid,
+        rootUri: null,
+        capabilities: {},
+      },
+      () => {
+        this.sendNotification('initialized', {});
+      }
+    );
+  }
+
+  private writeMessage(payload: Record<string, unknown>) {
+    if (!this.process) {
+      return;
+    }
+
+    const body = Buffer.from(JSON.stringify(payload), 'utf8');
+    const header = Buffer.from(`Content-Length: ${body.byteLength}\r\n\r\n`, 'ascii');
+    this.process.stdin.write(Buffer.concat([header, body]));
+  }
+
   private parseMessages() {
     while (true) {
-      let headerEndIndex = this._buffer.indexOf('\r\n\r\n');
-      if (headerEndIndex === -1) {
-        // We don't have a complete header yet
-        return;
-      }
+      if (this.nextMessageLength === null) {
+        const headerEndIndex = this.buffer.indexOf('\r\n\r\n');
+        if (headerEndIndex === -1) {
+          return;
+        }
 
-      const header = this._buffer.slice(0, headerEndIndex);
-      const rest = this._buffer.slice(headerEndIndex + 4);
+        const header = this.buffer.subarray(0, headerEndIndex).toString('ascii');
+        this.buffer = this.buffer.subarray(headerEndIndex + 4);
+        this.nextMessageLength = this.parseContentLength(header);
 
-      const headers = header.split('\r\n');
-      let contentLength = 0;
-
-      for (const line of headers) {
-        const [key, value] = line.split(': ');
-        if (key.toLowerCase() === 'content-length') {
-          contentLength = parseInt(value, 10);
+        if (this.nextMessageLength === null) {
+          this.buffer = Buffer.alloc(0);
+          return;
         }
       }
 
-      if (rest.length < contentLength) {
-        // Not enough data yet
+      if (this.buffer.length < this.nextMessageLength) {
         return;
       }
 
-      const message = rest.slice(0, contentLength);
-      this._buffer = rest.slice(contentLength);
-
-      this.handleMessage(message);
-
-      // Continue to parse any additional messages
+      const messageBuffer = this.buffer.subarray(0, this.nextMessageLength);
+      this.buffer = this.buffer.subarray(this.nextMessageLength);
+      this.nextMessageLength = null;
+      this.handleMessage(messageBuffer.toString('utf8'));
     }
+  }
+
+  private parseContentLength(header: string): number | null {
+    for (const line of header.split('\r\n')) {
+      const separatorIndex = line.indexOf(':');
+      if (separatorIndex === -1) {
+        continue;
+      }
+
+      const key = line.slice(0, separatorIndex).trim().toLowerCase();
+      const value = line.slice(separatorIndex + 1).trim();
+      if (key === 'content-length') {
+        const parsedValue = Number.parseInt(value, 10);
+        return Number.isFinite(parsedValue) ? parsedValue : null;
+      }
+    }
+
+    console.error('R language server message missing Content-Length header:', header);
+    return null;
   }
 
   private handleMessage(message: string) {
     try {
-  
       const jsonResponse = JSON.parse(message);
-  
+
       if (jsonResponse.id !== undefined) {
-        const handler = this._responseHandlers.get(jsonResponse.id);
+        const handler = this.responseHandlers.get(jsonResponse.id);
         if (handler) {
           handler(jsonResponse);
-          this._responseHandlers.delete(jsonResponse.id);
-        } else {
+          this.responseHandlers.delete(jsonResponse.id);
         }
-      } else if (jsonResponse.method) {
-        // Handle server-initiated messages if needed
       }
     } catch (error) {
       console.error('Failed to parse language server response:', error, 'Message:', message);
     }
   }
-  
-
-  private nextRequestId(): number {
-    return this._requestId++;
-  }
 }
-
-

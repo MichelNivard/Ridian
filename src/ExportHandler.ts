@@ -1,10 +1,8 @@
-// src/ExportHandler.ts
-
-import { TFile, Notice, FileSystemAdapter } from 'obsidian';
-import CombinedPlugin from './CombinedPlugin';
+import { FileSystemAdapter, Notice, TFile } from 'obsidian';
+import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawn } from 'child_process';
+import CombinedPlugin from './CombinedPlugin';
 
 export async function exportNoteWithQuarto(plugin: CombinedPlugin) {
   const activeFile = plugin.app.workspace.getActiveFile();
@@ -15,103 +13,68 @@ export async function exportNoteWithQuarto(plugin: CombinedPlugin) {
 
   try {
     const originalContent = await plugin.app.vault.read(activeFile);
-    let content = originalContent;
-
-    content = addFrontMatter(content, activeFile);
+    let content = addFrontMatter(originalContent, activeFile);
     content = stripOutputCallouts(content);
     content = replaceCodeFenceMarkers(content);
 
-    // Convert image links and collect image paths
-    const { content: newContent, imagePaths } = convertImageLinks(content);
-    content = newContent;
-
-    const exportFilePath = await savePreparedNote(plugin, content, activeFile.path);
-
-    // Copy image files to the export directory
-    const exportFolderPath = path.dirname(exportFilePath);
-    await copyImageFiles(plugin, imagePaths, exportFolderPath);
-
+    const { content: convertedContent, imagePaths } = convertImageLinks(content);
+    const exportFilePath = await savePreparedNote(plugin, convertedContent, activeFile.path);
+    await copyImageFiles(plugin, activeFile, imagePaths, path.dirname(exportFilePath));
     await renderWithQuarto(plugin, exportFilePath);
 
     new Notice('Note exported and rendered with Quarto successfully.');
-  } catch (err) {
-    console.error('Failed to export note with Quarto:', err);
-    new Notice('Failed to export note with Quarto.');
+  } catch (error) {
+    console.error('Failed to export note with Quarto:', error);
+    new Notice(
+      error instanceof Error ? `Failed to export note with Quarto: ${error.message}` : 'Failed to export note with Quarto.'
+    );
   }
 }
-
 
 function addFrontMatter(content: string, activeFile: TFile): string {
   if (content.startsWith('---\n')) {
     return content;
-  } else {
-    const title = activeFile.basename;
-    const frontMatter = `---
-title: "${title}"
+  }
+
+  return `---
+title: "${activeFile.basename}"
 author: "Author Name"
 date: today
 format: html
----\n\n`;
-    return frontMatter + content;
-  }
+---\n\n${content}`;
 }
 
 function stripOutputCallouts(content: string): string {
-  const outputCalloutRegex = /> \[!OUTPUT\]\+ {#output-[\w]+}\n(?:>.*\n)*>/gm;
+  const outputCalloutRegex = /> \[!(?:OUTPUT|ERROR)\]\+ {#output-[\w-]+}\n(?:>.*\n)*/gm;
   return content.replace(outputCalloutRegex, '');
 }
 
 function replaceCodeFenceMarkers(content: string): string {
-  const codeFenceRegex = /^```r$/gim;
-  return content.replace(codeFenceRegex, '```{r}');
+  return content.replace(/^```r$/gim, '```{r}');
 }
 
-async function savePreparedNote(plugin: CombinedPlugin, content: string, originalFilePath: string): Promise<string> {
+async function savePreparedNote(
+  plugin: CombinedPlugin,
+  content: string,
+  originalFilePath: string
+): Promise<string> {
   const baseName = path.basename(originalFilePath, '.md');
   const sanitizedBaseName = sanitizeFileName(baseName);
   const fileName = `${sanitizedBaseName}_quarto.qmd`;
-
-  let basePath: string;
   const adapter = plugin.app.vault.adapter;
-  
-  if (adapter instanceof FileSystemAdapter) {
-    basePath = adapter.getBasePath();
-  } else {
-    new Notice('Unable to determine vault base path. Export failed.');
+
+  if (!(adapter instanceof FileSystemAdapter)) {
     throw new Error('Vault adapter is not a FileSystemAdapter.');
   }
 
+  const basePath = adapter.getBasePath();
   const exportsFolderPath = path.join(basePath, 'exports');
   const baseExportFolderPath = path.join(exportsFolderPath, sanitizedBaseName);
-
-  if (!fs.existsSync(exportsFolderPath)) {
-    try {
-      fs.mkdirSync(exportsFolderPath);
-    } catch (error) {
-      new Notice('Failed to create exports folder. Export failed.');
-      throw error;
-    }
-  }
-
-  if (!fs.existsSync(baseExportFolderPath)) {
-    try {
-      fs.mkdirSync(baseExportFolderPath);
-    } catch (error) {
-      new Notice('Failed to create base export folder. Export failed.');
-      throw error;
-    }
-  }
+  await fs.promises.mkdir(baseExportFolderPath, { recursive: true });
 
   const exportFilePath = path.join(baseExportFolderPath, fileName);
-
-  try {
-    await fs.promises.writeFile(exportFilePath, content, 'utf8');
-    new Notice(`Exported to ${exportFilePath}`);
-  } catch (error) {
-    new Notice('Failed to write export file. Export failed.');
-    throw error;
-  }
-
+  await fs.promises.writeFile(exportFilePath, content, 'utf8');
+  new Notice(`Exported to ${exportFilePath}`);
   return exportFilePath;
 }
 
@@ -121,82 +84,106 @@ function sanitizeFileName(fileName: string): string {
 
 async function renderWithQuarto(plugin: CombinedPlugin, exportFilePath: string) {
   return new Promise<void>((resolve, reject) => {
-    const quartoExecutable = plugin.settings.quartoExecutablePath || 'quarto';
-
-    if (!fs.existsSync(quartoExecutable)) {
-      new Notice(`Quarto executable not found at ${quartoExecutable}. Please update the path in settings.`);
-      reject(new Error(`Quarto executable not found at ${quartoExecutable}.`));
+    const quartoExecutable = plugin.getResolvedQuartoExecutablePath();
+    if (!quartoExecutable) {
+      reject(
+        new Error(
+          'Quarto executable could not be resolved. Leave the setting blank for auto-detection or point it to the executable file.'
+        )
+      );
       return;
     }
 
-    const rExecutablePath = plugin.settings.rExecutablePath || 'Rscript';
+    const rExecutablePath = plugin.getResolvedRExecutablePath();
+    if (!rExecutablePath) {
+      reject(
+        new Error(
+          'R executable could not be resolved. Leave the setting blank for auto-detection or point it to the executable file.'
+        )
+      );
+      return;
+    }
 
-    const env = { ...process.env };
-    env.QUARTO_R = rExecutablePath;
+    const environment = { ...process.env };
+    environment.QUARTO_R = rExecutablePath;
+    environment.PATH = `${path.dirname(rExecutablePath)}${path.delimiter}${environment.PATH || ''}`;
 
-    const rscriptDir = path.dirname(rExecutablePath);
-    env.PATH = `${rscriptDir}${path.delimiter}${env.PATH}`;
+    const renderProcess = spawn(quartoExecutable, ['render', exportFilePath], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: environment,
+    });
 
-    const renderProcess = spawn(quartoExecutable, ['render', exportFilePath], { stdio: ['ignore', 'pipe', 'pipe'], env: env });
-
+    let stdoutData = '';
     let stderrData = '';
+
+    renderProcess.stdout.on('data', (data) => {
+      stdoutData += data.toString();
+    });
 
     renderProcess.stderr.on('data', (data) => {
       stderrData += data.toString();
     });
 
-    renderProcess.on('error', (err) => {
-      new Notice('Failed to start Quarto rendering process.');
-      reject(err);
+    renderProcess.on('error', (error) => {
+      reject(error);
     });
 
-    renderProcess.on('exit', (code, signal) => {
+    renderProcess.on('exit', (code) => {
       if (code === 0) {
-        new Notice('Quarto rendering completed successfully.');
         resolve();
-      } else {
-        console.error(`Quarto stderr: ${stderrData}`);
-        new Notice('Quarto rendering failed. Click for details.', 10000);
-        reject(new Error(`Quarto exited with code ${code}`));
+        return;
       }
+
+      reject(
+        new Error(
+          [stderrData.trim(), stdoutData.trim(), `Quarto exited with code ${code}.`]
+            .filter(Boolean)
+            .join('\n')
+        )
+      );
     });
   });
 }
-
 
 function convertImageLinks(content: string): { content: string; imagePaths: Set<string> } {
   const imageLinkRegex = /!\[\[([^\]]+)\]\]/g;
   const imagePaths = new Set<string>();
 
-  const newContent = content.replace(imageLinkRegex, (match, p1) => {
-    // Split the content inside the brackets on the '|' character
-    const [imagePath, altText] = p1.split('|');
-    const imageFileName = path.basename(imagePath);
-    imagePaths.add(imagePath.trim());
-
+  const newContent = content.replace(imageLinkRegex, (_match, inner) => {
+    const [imagePath, altText] = inner.split('|');
+    const cleanedPath = imagePath.trim();
+    imagePaths.add(cleanedPath);
+    const imageFileName = path.basename(cleanedPath);
     return `![${altText ? altText.trim() : imageFileName}](${imageFileName})`;
   });
 
   return { content: newContent, imagePaths };
 }
 
-
-async function copyImageFiles(plugin: CombinedPlugin, imagePaths: Set<string>, exportFolderPath: string) {
+async function copyImageFiles(
+  plugin: CombinedPlugin,
+  sourceFile: TFile,
+  imagePaths: Set<string>,
+  exportFolderPath: string
+) {
   const adapter = plugin.app.vault.adapter;
   if (!(adapter instanceof FileSystemAdapter)) {
     throw new Error('Vault adapter is not a FileSystemAdapter.');
   }
+
   const basePath = adapter.getBasePath();
 
   for (const imagePath of imagePaths) {
-    const fullImagePath = path.join(basePath, imagePath);
-    const imageFileName = path.basename(imagePath);
-    const destImagePath = path.join(exportFolderPath, imageFileName);
+    const resolvedImage = plugin.app.metadataCache.getFirstLinkpathDest(imagePath, sourceFile.path);
+    const sourcePath = resolvedImage
+      ? path.join(basePath, resolvedImage.path)
+      : path.join(basePath, imagePath);
+    const destinationPath = path.join(exportFolderPath, path.basename(imagePath));
 
     try {
-      await fs.promises.copyFile(fullImagePath, destImagePath);
-    } catch (err) {
-      console.error(`Failed to copy image ${imagePath} to ${destImagePath}:`, err);
+      await fs.promises.copyFile(sourcePath, destinationPath);
+    } catch (error) {
+      console.error(`Failed to copy image ${imagePath} to ${destinationPath}:`, error);
       new Notice(`Failed to copy image ${imagePath}.`);
     }
   }
