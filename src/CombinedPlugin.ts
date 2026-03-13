@@ -1,78 +1,57 @@
-// src/CombinedPlugin.ts
-
-import {
-  App,
-  Plugin,
-  MarkdownView,
-  Notice,
-  Editor,
-  EditorPosition,
-} from 'obsidian';
+import { App, Editor, EditorPosition, MarkdownView, Notice, Plugin } from 'obsidian';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { EditorView, ViewUpdate } from '@codemirror/view';
+import { Completion } from '@codemirror/autocomplete';
 import { FloatingMenu } from './FloatingMenu';
+import { exportNoteWithQuarto } from './ExportHandler';
+import { resolvePandocExecutable, resolveQuartoExecutable, resolveRExecutable } from './ExecutableUtils';
+import { setupPathEnvironment } from './PathUtils';
+import {
+  EnvironmentVariable,
+  getCurrentCodeChunk,
+  NoteRSession,
+  runCurrentCodeChunk,
+  stopAllRSessions,
+} from './RCodeEvaluator';
 import { REnvironmentView, VIEW_TYPE_R_ENVIRONMENT } from './REnvironmentView';
 import { RHelpView, VIEW_TYPE_R_HELP } from './RHelpView';
+import { RLanguageServer } from './RLanguageServer';
 import {
-  MyPluginSettingTab,
   CombinedPluginSettings,
   DEFAULT_SETTINGS,
+  MyPluginSettingTab,
 } from './SettingsTab';
-import { runCurrentCodeChunk, getCurrentCodeChunk } from './RCodeEvaluator';
-import { exportNoteWithQuarto } from './ExportHandler';
-import { setupPathEnvironment } from './PathUtils';
-import { RLanguageServer } from './RLanguageServer';
 import { SignatureHelpDropdown } from './SignatureHelpDropdown';
 import { CompletionDropdown } from './modal';
-import { EditorView, ViewUpdate } from '@codemirror/view';
-import { spawn, ChildProcessWithoutNullStreams } from 'child_process'
-import {
-  autocompletion,
-  Completion,
-  CompletionSource,
-  startCompletion,
-  CompletionContext,
-} from '@codemirror/autocomplete';
 
+interface EnvironmentSnapshot {
+  notePath: string;
+  noteTitle: string;
+  variables: EnvironmentVariable[];
+}
 
-
-
+interface HelpSnapshot {
+  notePath: string;
+  noteTitle: string;
+  helpContent: string;
+}
 
 export default class CombinedPlugin extends Plugin {
   settings: CombinedPluginSettings;
   floatingMenu: FloatingMenu;
-  rProcesses: Map<string, ChildProcessWithoutNullStreams> = new Map();
-  private rLanguageServer: RLanguageServer;
-  private _documentId = 1;
-  private isInsertingCompletion: boolean = false;
+  rSessions: Map<string, NoteRSession> = new Map();
+  private rLanguageServer: RLanguageServer | null = null;
   private currentCompletions: Completion[] = [];
   private currentDropdown: CompletionDropdown | null = null;
   private signatureHelpDropdown: SignatureHelpDropdown | null = null;
-
-  private completionSource: CompletionSource = (context: CompletionContext) => {
-    console.log('completionSource called, context:', context);
-  
-    if (this.currentCompletions.length === 0) {
-      return null;
-    }
-  
-    const word = context.matchBefore(/\w*/);
-    if (!word || (word.from === word.to && context.explicit === false)) {
-      return null;
-    }
-  
-    return {
-      from: word.from,
-      to: context.pos,
-      options: this.currentCompletions,
-    };
-  };
-  
+  private isInsertingCompletion = false;
+  private documentId = 1;
+  private latestEnvironmentSnapshot: EnvironmentSnapshot | null = null;
+  private latestHelpSnapshot: HelpSnapshot | null = null;
 
   async onload() {
-    console.log('Loading Combined Plugin');
-    // Apply wider code chunks
     document.body.setAttribute('ridian', 'true');
 
     await this.loadSettings();
@@ -84,41 +63,25 @@ export default class CombinedPlugin extends Plugin {
     }
 
     this.addSettingTab(new MyPluginSettingTab(this.app, this));
-
-    this.registerView(VIEW_TYPE_R_ENVIRONMENT, (leaf) => new REnvironmentView(leaf));
-    this.registerView(VIEW_TYPE_R_HELP, (leaf) => new RHelpView(leaf));
+    this.registerView(VIEW_TYPE_R_ENVIRONMENT, (leaf) => new REnvironmentView(leaf, this));
+    this.registerView(VIEW_TYPE_R_HELP, (leaf) => new RHelpView(leaf, this));
 
     this.app.workspace.onLayoutReady(() => {
       this.initializeViews();
     });
 
     this.registerCommands();
-
-    const rExecutablePath = this.settings.rExecutablePath.trim() || '/usr/local/bin/R';
-
-    this.rLanguageServer = new RLanguageServer(
-      rExecutablePath,
-      this.handleCompletion.bind(this),
-      this.handleHover.bind(this)
-    );
-    this.rLanguageServer.start();
-
-    // Register editor events
+    this.startLanguageServer();
     this.registerEditorEvents();
-
-    console.log('Combined Plugin loaded successfully');
   }
 
   onunload() {
-    console.log('Unloading Combined Plugin');
-    // Remove wider code chunks
     document.body.removeAttribute('ridian');
-
     this.floatingMenu.onUnload();
-
-    this.rLanguageServer.stop();
-
-    console.log('Combined Plugin unloaded successfully');
+    this.closeCompletionDropdown();
+    this.closeSignatureHelpDropdown();
+    this.stopLanguageServer();
+    stopAllRSessions(this);
   }
 
   async loadSettings() {
@@ -129,26 +92,101 @@ export default class CombinedPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
+  public getResolvedRExecutablePath(): string | null {
+    return resolveRExecutable(this.settings.rExecutablePath).resolvedPath;
+  }
+
+  public getResolvedQuartoExecutablePath(): string | null {
+    return resolveQuartoExecutable(this.settings.quartoExecutablePath).resolvedPath;
+  }
+
+  public getResolvedPandocPath(): string | null {
+    return resolvePandocExecutable(this.settings.rstudioPandocPath).resolvedPath;
+  }
+
+  public getLatestEnvironmentSnapshot() {
+    return this.latestEnvironmentSnapshot;
+  }
+
+  public getLatestHelpSnapshot() {
+    return this.latestHelpSnapshot;
+  }
+
+  public publishEnvironmentData(
+    notePath: string,
+    noteTitle: string,
+    variables: EnvironmentVariable[]
+  ) {
+    this.latestEnvironmentSnapshot = {
+      notePath,
+      noteTitle,
+      variables,
+    };
+
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_R_ENVIRONMENT)) {
+      if (leaf.view instanceof REnvironmentView) {
+        leaf.view.updateEnvironmentData(noteTitle, variables);
+      }
+    }
+  }
+
+  public publishHelpContent(notePath: string, noteTitle: string, helpContent: string) {
+    this.latestHelpSnapshot = {
+      notePath,
+      noteTitle,
+      helpContent,
+    };
+
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_R_HELP)) {
+      if (leaf.view instanceof RHelpView) {
+        leaf.view.updateHelpContent(helpContent);
+      }
+    }
+  }
+
+  public async updateRExecutablePath(value: string) {
+    this.settings.rExecutablePath = value.trim();
+    await this.saveSettings();
+    this.startLanguageServer();
+  }
+
+  public async updatePandocPath(value: string) {
+    this.settings.rstudioPandocPath = value.trim();
+    await this.saveSettings();
+  }
+
+  public async updateQuartoExecutablePath(value: string) {
+    this.settings.quartoExecutablePath = value.trim();
+    await this.saveSettings();
+  }
+
+  public async setFloatingMenuEnabled(enabled: boolean) {
+    this.settings.enableFloatingMenu = enabled;
+    await this.saveSettings();
+
+    if (enabled) {
+      this.floatingMenu.onLoad();
+    } else {
+      this.floatingMenu.onUnload();
+    }
+  }
+
+  public async toggleFloatingMenu() {
+    await this.setFloatingMenuEnabled(!this.settings.enableFloatingMenu);
+  }
+
   private initializeViews() {
-    // Initialize R Environment View
     if (this.app.workspace.getLeavesOfType(VIEW_TYPE_R_ENVIRONMENT).length === 0) {
       const leaf = this.app.workspace.getRightLeaf(false);
       if (leaf) {
-        leaf.setViewState({
-          type: VIEW_TYPE_R_ENVIRONMENT,
-          active: true,
-        });
+        void leaf.setViewState({ type: VIEW_TYPE_R_ENVIRONMENT, active: true });
       }
     }
 
-    // Initialize R Help View
     if (this.app.workspace.getLeavesOfType(VIEW_TYPE_R_HELP).length === 0) {
       const leaf = this.app.workspace.getRightLeaf(true);
       if (leaf) {
-        leaf.setViewState({
-            type: VIEW_TYPE_R_HELP,
-            active: true,
-        });
+        void leaf.setViewState({ type: VIEW_TYPE_R_HELP, active: true });
       }
     }
   }
@@ -162,332 +200,301 @@ export default class CombinedPlugin extends Plugin {
           new Notice('Current view is not a markdown view.');
           return;
         }
+
         if (!view.file) {
           new Notice('No file associated with the current view.');
           return;
         }
-        const noteTitle = view.file.basename;
-        runCurrentCodeChunk(this, editor, view, noteTitle);
+
+        void runCurrentCodeChunk(this, editor, view, view.file.basename);
       },
       hotkeys: [{ modifiers: ['Mod'], key: 'r' }],
     });
 
     this.addCommand({
+      id: 'insert-r-code-chunk',
+      name: 'Insert R Code Chunk',
+      editorCallback: (editor) => {
+        this.insertCodeBlock('r', editor);
+      },
+    });
+
+    this.addCommand({
+      id: 'toggle-floating-menu',
+      name: 'Toggle Floating Menu',
+      callback: () => {
+        void this.toggleFloatingMenu();
+      },
+    });
+
+    this.addCommand({
       id: 'export-note-with-quarto',
       name: 'Export Note with Quarto',
-      callback: () => exportNoteWithQuarto(this),
+      callback: () => {
+        void exportNoteWithQuarto(this);
+      },
     });
   }
 
-  // Register editor events for cursor activity
   private registerEditorEvents() {
-    // Handle cursor activity
     this.registerEditorExtension(
       EditorView.updateListener.of((update: ViewUpdate) => {
         const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (!activeView || !activeView.editor) {
+        if (!activeView?.editor) {
           return;
         }
 
-        const editor = activeView.editor;
-
         if (update.selectionSet) {
-          this.handleCursorActivity(editor);
+          this.handleCursorActivity(activeView.editor);
         }
       })
     );
   }
 
+  private startLanguageServer() {
+    this.stopLanguageServer();
 
+    const rExecutablePath = this.getResolvedRExecutablePath();
+    if (!rExecutablePath) {
+      console.warn('R executable could not be resolved. Language server disabled.');
+      return;
+    }
+
+    this.rLanguageServer = new RLanguageServer(rExecutablePath);
+    this.rLanguageServer.start();
+  }
+
+  private stopLanguageServer() {
+    if (!this.rLanguageServer) {
+      return;
+    }
+
+    this.rLanguageServer.stop();
+    this.rLanguageServer = null;
+  }
 
   private nextDocumentId(): number {
-    return this._documentId++;
+    return this.documentId++;
   }
 
-  
   private handleCompletion(items: any[]) {
-    
-  
     if (items.length === 0) {
-      if (this.currentDropdown) {
-        console.log('No completions available. Closing existing dropdown.');
-        this.currentDropdown.close();
-        this.currentDropdown = null;
-      }
+      this.closeCompletionDropdown();
       return;
     }
 
-    const completions: Completion[] = items.map((item: any) => {
-      const label = item.label || '';
-      const insertText = item.textEdit?.newText || item.insertText || label;
-      const detail = item.detail || '';
-      const info =
+    this.currentCompletions = items.map((item: any) => ({
+      label: item.label || '',
+      detail: item.detail || '',
+      info:
         typeof item.documentation === 'string'
           ? item.documentation
-          : item.documentation?.value || undefined;
-  
-      return {
-        label,
-        insertText,
-        detail,
-        info,
-      };
-    });
-  
-    this.currentCompletions = completions;
-  
+          : item.documentation?.value || undefined,
+      insertText: item.textEdit?.newText || item.insertText || item.label || '',
+    }));
+
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!activeView) return;
-  
-    const editor = activeView.editor;
-  
-    // Show the completion dropdown
-    this.showCompletionDropdown(editor);
-  }
-
-  
-  private handleHover(contents: string) {
-    // Update the editor with hover information (tooltips)
-    console.log('Hover contents:', contents);
-    // Implement logic to display hover information in the editor
-  }
-
- private showCompletionDropdown(editor: Editor) {
-  if (!this.currentCompletions || this.currentCompletions.length === 0) {
-    return;
-  }
-
-  // Close any existing dropdown
-  if (this.currentDropdown) {
-    this.currentDropdown.close();
-  }
-
-  // Create a new dropdown and store the reference
-  this.currentDropdown = new CompletionDropdown(this.app, editor, this.currentCompletions, (completion) => {
-    const textToInsert = (completion as any).insertText || completion.label;
-    this.insertCompletionAtCursor(editor, textToInsert);
-    // After inserting, close the dropdown
-    if (this.currentDropdown) {
-      this.currentDropdown.close();
-      this.currentDropdown = null;
+    if (!activeView) {
+      return;
     }
-  });
-}
 
-private insertCompletionAtCursor(editor: Editor, text: string) {
-  this.isInsertingCompletion = true; // Start insertion
-
-  const cursor = editor.getCursor();
-  const line = editor.getLine(cursor.line);
-  
-  // Updated regex to include dots for R function names
-  const wordStart = line.slice(0, cursor.ch).match(/[\w.]*$/)?.[0] || '';
-  const wordEnd = line.slice(cursor.ch).match(/^[\w.]*/)?.[0] || '';
-  
-  const from = { line: cursor.line, ch: cursor.ch - wordStart.length };
-  const to = { line: cursor.line, ch: cursor.ch + wordEnd.length };
-  
-  editor.replaceRange(text, from, to);
-  editor.setCursor({ line: cursor.line, ch: from.ch + text.length });
-
-  this.isInsertingCompletion = false; // End insertion
-}
-
-/// this.currentDropdown.close();
-
-// src/CombinedPlugin.ts
-private handleCursorActivity(editor: Editor) {
-  if (this.isInsertingCompletion) {
-      return; // Skip handling cursor activity during insertion
+    this.showCompletionDropdown(activeView.editor);
   }
 
-  const cursor = editor.getCursor();
-  const line = editor.getLine(cursor.line);
-  const beforeCursor = line.slice(0, cursor.ch);
+  private showCompletionDropdown(editor: Editor) {
+    if (this.currentCompletions.length === 0) {
+      return;
+    }
 
-  // Regex to check if the cursor is inside a function call (e.g., lm(|))
-  const functionCallMatch = beforeCursor.match(/(\w+)\([^)]*$/);
-
-  if (functionCallMatch) {
-      // Cursor is inside a function call
-
-      // Close the Completion Dropdown if it's open
-      if (this.currentDropdown) {
--
-          this.currentDropdown.close();
-          this.currentDropdown = null;
+    this.closeCompletionDropdown();
+    this.currentDropdown = new CompletionDropdown(
+      this.app,
+      editor,
+      this.currentCompletions,
+      (completion) => {
+        const textToInsert = (completion as any).insertText || completion.label;
+        this.insertCompletionAtCursor(editor, textToInsert);
+        this.closeCompletionDropdown();
       }
+    );
+  }
 
-      // Proceed to show Signature Help Dropdown
+  private closeCompletionDropdown() {
+    if (!this.currentDropdown) {
+      return;
+    }
+
+    this.currentDropdown.close();
+    this.currentDropdown = null;
+  }
+
+  private insertCompletionAtCursor(editor: Editor, text: string) {
+    this.isInsertingCompletion = true;
+
+    const cursor = editor.getCursor();
+    const line = editor.getLine(cursor.line);
+    const wordStart = line.slice(0, cursor.ch).match(/[\w.]*$/)?.[0] || '';
+    const wordEnd = line.slice(cursor.ch).match(/^[\w.]*/)?.[0] || '';
+    const from = { line: cursor.line, ch: cursor.ch - wordStart.length };
+    const to = { line: cursor.line, ch: cursor.ch + wordEnd.length };
+
+    editor.replaceRange(text, from, to);
+    editor.setCursor({ line: cursor.line, ch: from.ch + text.length });
+    this.isInsertingCompletion = false;
+  }
+
+  private handleCursorActivity(editor: Editor) {
+    if (this.isInsertingCompletion || !this.rLanguageServer) {
+      return;
+    }
+
+    const cursor = editor.getCursor();
+    const line = editor.getLine(cursor.line);
+    const beforeCursor = line.slice(0, cursor.ch);
+    const functionCallMatch = beforeCursor.match(/([\w.]+)\([^)]*$/);
+
+    if (functionCallMatch) {
+      this.closeCompletionDropdown();
       this.showSignatureHelp(editor, cursor);
-  } else {
-      // Cursor is outside a function call
+      return;
+    }
 
-      // Close the Signature Help Dropdown if it's open
-      if (this.signatureHelpDropdown) {
- -
-          this.signatureHelpDropdown.close();
-          this.signatureHelpDropdown = null;
-      }
-
-      // Proceed to show Completion Dropdown
-      this.showCompletion(editor, cursor);
+    this.closeSignatureHelpDropdown();
+    this.showCompletion(editor, cursor);
   }
-}
 
-private showSignatureHelp(editor: Editor, cursor: EditorPosition) {
-  const { codeWithAll, startLine } = getCurrentCodeChunk(editor, cursor.line);
+  private showSignatureHelp(editor: Editor, cursor: EditorPosition) {
+    if (!this.rLanguageServer) {
+      return;
+    }
 
-  if (!codeWithAll) {
+    const virtualDocument = this.createVirtualDocument(editor, cursor);
+    if (!virtualDocument) {
       this.closeSignatureHelpDropdown();
       return;
-  }
+    }
 
-  // Write code chunk to a temporary file
-  const tempDir = os.tmpdir();
-  const tempFileName = `obsidian-virtual-document-${this.nextDocumentId()}.r`;
-  const tempFilePath = path.join(tempDir, tempFileName);
-  fs.writeFileSync(tempFilePath, codeWithAll);
+    this.rLanguageServer.sendNotification('textDocument/didOpen', {
+      textDocument: virtualDocument.textDocument,
+    });
 
-  const virtualUri = `file://${tempFilePath.replace(/\\/g, '/')}`; // Replace backslashes on Windows
-  const languageId = 'r';
-  const version = 1;
-
-  // Adjust the cursor position relative to the code chunk
-  const position = {
-      line: cursor.line - (startLine + 1), // Adjusted line number
-      character: cursor.ch,
-  };
-
-  // Log the uri and position
-
-  // Send didOpen notification for the code chunk
-  this.rLanguageServer.sendNotification('textDocument/didOpen', {
-      textDocument: {
-          uri: virtualUri,
-          languageId: languageId,
-          version: version,
-          text: codeWithAll,
-      },
-  });
-
-  // Send signature help request with a response handler
-  this.rLanguageServer.sendSignatureHelpRequest(
-      virtualUri,
-      position,
+    this.rLanguageServer.sendSignatureHelpRequest(
+      virtualDocument.textDocument.uri,
+      virtualDocument.position,
       (response) => {
-          if (response.result) {
-              this.handleSignatureHelp(response.result);
-          } else {
-              console.error('Unexpected signatureHelp response:', response);
-              this.closeSignatureHelpDropdown();
-          }
+        if (response.result?.signatures?.length) {
+          this.handleSignatureHelp(response.result);
+        } else {
+          this.closeSignatureHelpDropdown();
+        }
       }
-  );
-}
-
-private showCompletion(editor: Editor, cursor: EditorPosition) {
-  const { codeWithAll, startLine } = getCurrentCodeChunk(editor, cursor.line);
-
-  if (!codeWithAll) {
-
-      if (this.currentDropdown) {
-
-        this.currentDropdown.close();
-        this.currentDropdown = null;
-      }
-      return;
+    );
   }
 
-  // Write code chunk to a temporary file
-  const tempDir = os.tmpdir();
-  const tempFileName = `obsidian-virtual-document-${this.nextDocumentId()}.r`;
-  const tempFilePath = path.join(tempDir, tempFileName);
-  fs.writeFileSync(tempFilePath, codeWithAll);
+  private showCompletion(editor: Editor, cursor: EditorPosition) {
+    if (!this.rLanguageServer) {
+      return;
+    }
 
-  const virtualUri = `file://${tempFilePath.replace(/\\/g, '/')}`; // Replace backslashes on Windows
-  const languageId = 'r';
-  const version = 1;
+    const virtualDocument = this.createVirtualDocument(editor, cursor);
+    if (!virtualDocument) {
+      this.closeCompletionDropdown();
+      return;
+    }
 
-  // Adjust the cursor position relative to the code chunk
-  const position = {
-      line: cursor.line - (startLine + 1), // Adjusted line number
-      character: cursor.ch,
-  };
+    this.rLanguageServer.sendNotification('textDocument/didOpen', {
+      textDocument: virtualDocument.textDocument,
+    });
 
-
-
-  // Send didOpen notification for the code chunk
-  this.rLanguageServer.sendNotification('textDocument/didOpen', {
-      textDocument: {
-          uri: virtualUri,
-          languageId: languageId,
-          version: version,
-          text: codeWithAll,
-      },
-  });
-
-  // Send completion request with a response handler
-  this.rLanguageServer.sendRequest(
+    this.rLanguageServer.sendRequest(
       'textDocument/completion',
       {
-          textDocument: { uri: virtualUri },
-          position: position,
-          context: { triggerKind: 1 },
+        textDocument: { uri: virtualDocument.textDocument.uri },
+        position: virtualDocument.position,
+        context: { triggerKind: 1 },
       },
       (response) => {
-          if (response.result && response.result.items) {
-              this.handleCompletion(response.result.items);
-          } else {
-              console.error('Unexpected completion response:', response);
-          }
+        const items = Array.isArray(response.result)
+          ? response.result
+          : response.result?.items || [];
+        this.handleCompletion(items);
       }
-  );
-}
-
-
-private handleSignatureHelp(result: any) {
-  if (!result || !result.signatures || result.signatures.length === 0) {
-    this.closeSignatureHelpDropdown();
-    return;
+    );
   }
 
-  const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-  if (!activeView) return;
+  private createVirtualDocument(editor: Editor, cursor: EditorPosition) {
+    const { codeWithAll, startLine } = getCurrentCodeChunk(editor, cursor.line);
+    if (!codeWithAll) {
+      return null;
+    }
 
-  const editor = activeView.editor;
+    const tempDir = os.tmpdir();
+    const tempFilePath = path.join(
+      tempDir,
+      `obsidian-virtual-document-${this.nextDocumentId()}.r`
+    );
+    fs.writeFileSync(tempFilePath, codeWithAll);
 
-  if (this.signatureHelpDropdown) {
-    this.signatureHelpDropdown.updateContent(result.signatures);
-  } else {
-    this.signatureHelpDropdown = new SignatureHelpDropdown(this.app, editor, result.signatures, () => {
-      this.signatureHelpDropdown = null;
-    });
+    return {
+      textDocument: {
+        uri: `file://${tempFilePath.replace(/\\/g, '/')}`,
+        languageId: 'r',
+        version: 1,
+        text: codeWithAll,
+      },
+      position: {
+        line: cursor.line - (startLine + 1),
+        character: cursor.ch,
+      },
+    };
   }
-}
 
-private closeSignatureHelpDropdown() {
-  if (this.signatureHelpDropdown) {
+  private handleSignatureHelp(result: any) {
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!activeView) {
+      return;
+    }
+
+    if (this.signatureHelpDropdown) {
+      this.signatureHelpDropdown.updateContent(result.signatures);
+      return;
+    }
+
+    this.signatureHelpDropdown = new SignatureHelpDropdown(
+      this.app,
+      activeView.editor,
+      result.signatures,
+      () => {
+        this.signatureHelpDropdown = null;
+      }
+    );
+  }
+
+  private closeSignatureHelpDropdown() {
+    if (!this.signatureHelpDropdown) {
+      return;
+    }
+
     this.signatureHelpDropdown.close();
     this.signatureHelpDropdown = null;
   }
-}
-
-
-
-  // Utility methods for text formatting in the editor
 
   public applyWrapping(wrapper: string) {
-    const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!activeLeaf) return;
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!activeView) {
+      return;
+    }
 
-    const editor = activeLeaf.editor;
+    const editor = activeView.editor;
     const selection = editor.getSelection();
 
     if (selection) {
       editor.replaceSelection(`${wrapper}${selection}${wrapper}`);
       const cursor = editor.getCursor();
-      const start = { line: cursor.line, ch: cursor.ch - selection.length - wrapper.length };
+      const start = {
+        line: cursor.line,
+        ch: cursor.ch - selection.length - wrapper.length,
+      };
       const end = { line: cursor.line, ch: cursor.ch - wrapper.length };
       editor.setSelection(start, end);
     } else {
@@ -501,10 +508,12 @@ private closeSignatureHelpDropdown() {
   }
 
   public applyHtmlTag(tag: string) {
-    const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!activeLeaf) return;
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!activeView) {
+      return;
+    }
 
-    const editor = activeLeaf.editor;
+    const editor = activeView.editor;
     const selection = editor.getSelection();
     const openTag = `<${tag}>`;
     const closeTag = `</${tag}>`;
@@ -512,8 +521,7 @@ private closeSignatureHelpDropdown() {
     if (selection) {
       editor.replaceSelection(`${openTag}${selection}${closeTag}`);
       const cursor = editor.getCursor();
-      const newCh = cursor.ch - closeTag.length;
-      editor.setCursor({ line: cursor.line, ch: newCh });
+      editor.setCursor({ line: cursor.line, ch: cursor.ch - closeTag.length });
     } else {
       editor.replaceRange(`${openTag}${closeTag}`, editor.getCursor());
       const cursor = editor.getCursor();
@@ -524,14 +532,16 @@ private closeSignatureHelpDropdown() {
   }
 
   public applyHeading(level: number) {
-    const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!activeLeaf) return;
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!activeView) {
+      return;
+    }
 
-    const editor = activeLeaf.editor;
+    const editor = activeView.editor;
     const cursor = editor.getCursor();
     const lineContent = editor.getLine(cursor.line);
+    const headingPrefix = `${'#'.repeat(level)} `;
 
-    const headingPrefix = '#'.repeat(level) + ' ';
     if (lineContent.startsWith('#')) {
       const lineWithoutHashes = lineContent.replace(/^#+\s*/, '');
       editor.replaceRange(
@@ -543,39 +553,36 @@ private closeSignatureHelpDropdown() {
       editor.replaceRange(headingPrefix, { line: cursor.line, ch: 0 });
     }
 
-    const newCh = headingPrefix.length;
-    editor.setCursor({ line: cursor.line, ch: newCh });
-
+    editor.setCursor({ line: cursor.line, ch: headingPrefix.length });
     editor.focus();
   }
 
-  public insertCodeBlock(language: string) {
-    const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!activeLeaf) return;
+  public insertCodeBlock(language: string, editorOverride?: Editor) {
+    const editor =
+      editorOverride || this.app.workspace.getActiveViewOfType(MarkdownView)?.editor || null;
+    if (!editor) {
+      return;
+    }
 
-    const editor = activeLeaf.editor;
     const cursor = editor.getCursor();
+    const codeFenceStart = language === 'r' ? '```{r}\n' : `\`\`\`${language}\n`;
+    const codeFenceEnd = '\n```\n';
 
-    const codeBlock = `\`\`\`${language}\n`;
-    const codeBlockEnd = `\n\`\`\`\n`;
-
-    editor.replaceRange(codeBlock, cursor);
-    editor.replaceRange(codeBlockEnd, { line: cursor.line, ch: cursor.ch + codeBlock.length });
-
-    const newCursor = { line: cursor.line + 1, ch: 0 };
-    editor.setSelection(newCursor, newCursor);
-
+    editor.replaceRange(codeFenceStart + codeFenceEnd, cursor);
+    editor.setCursor({ line: cursor.line + 1, ch: 0 });
     editor.focus();
   }
 
   public applyAlignment(alignment: 'left' | 'center' | 'right' | 'justify') {
-    const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!activeLeaf) return;
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!activeView) {
+      return;
+    }
 
-    const editor = activeLeaf.editor;
+    const editor = activeView.editor;
     const selection = editor.getSelection();
     const openDiv = `<div style="text-align: ${alignment};">`;
-    const closeDiv = `</div>`;
+    const closeDiv = '</div>';
 
     if (selection) {
       editor.replaceSelection(`${openDiv}\n${selection}\n${closeDiv}`);
@@ -590,7 +597,6 @@ private closeSignatureHelpDropdown() {
     editor.focus();
   }
 
-  // Method to run commands from the floating menu
   public runCommand(commandId: string) {
     const fullCommandId = `ridian:${commandId}`;
     (this.app as any).commands.executeCommandById(fullCommandId);

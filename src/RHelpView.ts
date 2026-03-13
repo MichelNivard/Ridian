@@ -1,14 +1,17 @@
 // src/RHelpView.ts
 
 import { ItemView, WorkspaceLeaf } from 'obsidian';
+import CombinedPlugin from './CombinedPlugin';
 
 export const VIEW_TYPE_R_HELP = 'r-help-view';
 
 export class RHelpView extends ItemView {
+  private plugin: CombinedPlugin;
   private helpContent: string = '';
 
-  constructor(leaf: WorkspaceLeaf) {
+  constructor(leaf: WorkspaceLeaf, plugin: CombinedPlugin) {
     super(leaf);
+    this.plugin = plugin;
   }
 
   getViewType() {
@@ -25,6 +28,10 @@ export class RHelpView extends ItemView {
 
   async onOpen() {
     this.contentEl.empty();
+    const snapshot = this.plugin.getLatestHelpSnapshot();
+    if (snapshot) {
+      this.helpContent = snapshot.helpContent;
+    }
     this.render();
   }
 
@@ -42,6 +49,12 @@ export class RHelpView extends ItemView {
 
     const content = document.createElement('div');
     content.classList.add('r-help-content');
+
+    if (!this.helpContent) {
+      content.textContent = 'Run ?topic or help(topic) in an R chunk to load help here.';
+      this.contentEl.appendChild(content);
+      return;
+    }
 
     content.innerHTML = this.helpContent;
 

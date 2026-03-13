@@ -31,9 +31,9 @@ literal programming with R notebooks, and Quarto rendering from within Obsidian:
 - It wont cover other programming languages (5% chance of python), here is an excelent option for that: [execute code plugin](https://github.com/twibiral/obsidian-execute-code)
 
 > [!IMPORTANT]
-> In the Ridian settings provide the path to your R/pandoc/quarto executables, The R executable can for example be at Mac: /usr/local/bin/R Windows: C:\Program Files (x86)\R\R-4.4.1\bin\R.exe
+> In the Ridian settings you can leave the R/pandoc/quarto paths blank and let Ridian auto-detect them. If you set them manually, point to the executable file itself, not just the enclosing folder.
 > 
-> The plugin will try to guess the R install (and probably fail)
+> The R executable can for example be at Mac: /usr/local/bin/R Windows: C:\Program Files (x86)\R\R-4.4.1\bin\R.exe
 
 
 ## Demo video:
@@ -63,11 +63,10 @@ https://github.com/user-attachments/assets/334f7af5-0e71-4b9f-9ac8-672a734c91d8
 
 > [!NOTE]
 > Known Issues/To-Do:
-> 1. uses absolute paths for htmlwidgets
-> 2. Every note spins up an R process, if you do this for many notes you'll overwhlm memory
-> 3. Only confirmed to work on MacOS on my mackbook & on Win 11's (on my macbook)
-> 4. No tests and other development necessities implemented
-> 5. No Contribution guilines (but help wanted!)
+> 1. Every note spins up a note-local R process, so opening many active notes can still consume memory
+> 2. Only confirmed to work on MacOS on my mackbook & on Win 11's (on my macbook)
+> 3. No tests and other development necessities implemented
+> 4. No Contribution guilines (but help wanted!)
 
 
 
@@ -92,7 +91,13 @@ In the **Ridian** settings provide the path to your R installation, which can fo
    Mac: /usr/local/bin/R
    Windows: C:\Program Files (x86)\R\R-4.4.1\bin\R.exe
 
-After you set the path Ridian will adjust it for internal use (it might look different if you revisit the plugin.
+After you set the path Ridian will adjust it for internal use (it might look different if you revisit the plugin).
+
+Commands are available from the command palette for:
+- Run Current Code Chunk
+- Insert R Code Chunk
+- Toggle Floating Menu
+- Export Note with Quarto
 
 Install pandoc (https://pandoc.org) and point **Ridian** to your pandoc install if you want to use **htmlwidgets** in R.
 

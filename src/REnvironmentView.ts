@@ -1,15 +1,19 @@
 // src/REnvironmentView.ts
 
 import { ItemView, WorkspaceLeaf } from 'obsidian';
+import CombinedPlugin from './CombinedPlugin';
+import { EnvironmentVariable } from './RCodeEvaluator';
 
 export const VIEW_TYPE_R_ENVIRONMENT = 'r-environment-view';
 
 export class REnvironmentView extends ItemView {
-  private environmentData: any[] = [];
+  private plugin: CombinedPlugin;
+  private environmentData: EnvironmentVariable[] = [];
   private noteTitle: string = '';
 
-  constructor(leaf: WorkspaceLeaf) {
+  constructor(leaf: WorkspaceLeaf, plugin: CombinedPlugin) {
     super(leaf);
+    this.plugin = plugin;
   }
 
   getViewType() {
@@ -26,6 +30,11 @@ export class REnvironmentView extends ItemView {
 
   async onOpen() {
     this.containerEl.empty();
+    const snapshot = this.plugin.getLatestEnvironmentSnapshot();
+    if (snapshot) {
+      this.noteTitle = snapshot.noteTitle;
+      this.environmentData = snapshot.variables;
+    }
     this.render();
   }
 
@@ -33,7 +42,7 @@ export class REnvironmentView extends ItemView {
     // Cleanup if needed
   }
 
-  public updateEnvironmentData(noteTitle: string, data: any[]) {
+  public updateEnvironmentData(noteTitle: string, data: EnvironmentVariable[]) {
     this.noteTitle = noteTitle;
     this.environmentData = data;
     this.render();
@@ -46,10 +55,20 @@ export class REnvironmentView extends ItemView {
     content.classList.add('r-environment-content');
 
     const title = document.createElement('h5');
-    title.textContent = `R environment for ${this.noteTitle}`;
+    title.textContent = this.noteTitle
+      ? `R environment for ${this.noteTitle}`
+      : 'R environment';
     title.classList.add('r-environment-title');
 
     content.appendChild(title);
+
+    if (this.environmentData.length === 0) {
+      const emptyState = document.createElement('p');
+      emptyState.textContent = 'Run an R chunk to populate this note-local environment.';
+      content.appendChild(emptyState);
+      this.containerEl.appendChild(content);
+      return;
+    }
 
     const table = document.createElement('table');
     table.classList.add('r-environment-table');
@@ -64,8 +83,7 @@ export class REnvironmentView extends ItemView {
     });
     table.appendChild(headerRow);
 
-    const variables = this.environmentData;
-    variables.forEach((variable: any) => {
+    this.environmentData.forEach((variable) => {
       const row = document.createElement('tr');
       row.classList.add('r-environment-row');
 
@@ -96,8 +114,8 @@ export class REnvironmentView extends ItemView {
       row.appendChild(sizeCell);
 
       const valuePreview = Array.isArray(variable.value)
-        ? variable.value.slice(0, 5).join(', ') + ' ...'
-        : variable.value.toString();
+        ? `${variable.value.slice(0, 5).join(', ')} ...`
+        : String(variable.value);
       const valCell = createCell(valuePreview);
       valCell.classList.add('value-cell');
       row.appendChild(valCell);

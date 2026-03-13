@@ -1,39 +1,45 @@
 // src/FloatingMenu.ts
-
-import { Plugin, MarkdownView, setIcon,setTooltip } from 'obsidian';
+import { EventRef, MarkdownView, setIcon, setTooltip } from 'obsidian';
 import CombinedPlugin from './CombinedPlugin';
 
 export class FloatingMenu {
   plugin: CombinedPlugin;
-  menuContainer: HTMLDivElement;
+  menuContainer: HTMLDivElement | null = null;
+  private editorContainer: HTMLElement | null = null;
+  private eventRefs: EventRef[] = [];
+  private loaded: boolean = false;
 
   constructor(plugin: CombinedPlugin) {
     this.plugin = plugin;
   }
 
   onLoad() {
+    if (this.loaded) {
+      return;
+    }
+
+    this.loaded = true;
     this.addMenu();
-    this.plugin.registerEvent(
-      this.plugin.app.workspace.on('active-leaf-change', () => {
-        this.addMenu();
-      })
+    this.eventRefs.push(
+      this.plugin.app.workspace.on('active-leaf-change', () => this.addMenu())
     );
-    this.plugin.registerEvent(
-      this.plugin.app.workspace.on('layout-change', () => {
-        this.addMenu();
-      })
-    );
+    this.eventRefs.push(this.plugin.app.workspace.on('layout-change', () => this.addMenu()));
   }
 
   onUnload() {
-    if (this.menuContainer) {
-      this.menuContainer.remove();
+    this.loaded = false;
+    for (const eventRef of this.eventRefs) {
+      this.plugin.app.workspace.offref(eventRef);
     }
+    this.eventRefs = [];
+    this.removeMenu();
   }
 
   private addMenu() {
-    if (this.menuContainer) {
-      this.menuContainer.remove();
+    this.removeMenu();
+
+    if (!this.loaded || !this.plugin.settings.enableFloatingMenu) {
+      return;
     }
 
     const activeView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
@@ -44,6 +50,7 @@ export class FloatingMenu {
 
     this.menuContainer = document.createElement('div');
     this.menuContainer.className = 'floating-menu';
+    this.editorContainer = editorContainer as HTMLElement;
 
     const boldButton = this.createIconButton('bold', () => this.plugin.applyWrapping('**'), 'Bold');
     const italicButton = this.createIconButton('italic', () => this.plugin.applyWrapping('_'), 'Italic');
@@ -74,6 +81,13 @@ export class FloatingMenu {
       () => this.plugin.runCommand('export-note-with-quarto'),
       'Export note with Quarto'
     );
+    const hideMenuButton = this.createIconButton(
+      'x',
+      () => {
+        void this.plugin.toggleFloatingMenu();
+      },
+      'Hide floating menu'
+    );
 
     // Apply styles if needed
     runChunkButton.classList.add('glow-on-hover');
@@ -95,12 +109,25 @@ export class FloatingMenu {
     this.menuContainer.appendChild(codeBlockButton);
     this.menuContainer.appendChild(runChunkButton);
     this.menuContainer.appendChild(exportNoteButton);
+    this.menuContainer.appendChild(hideMenuButton);
 
     if (editorContainer.parentElement) {
       editorContainer.parentElement.insertBefore(this.menuContainer, editorContainer);
     }
 
-    (editorContainer as HTMLElement).style.marginTop = `${this.menuContainer.offsetHeight}px`;
+    this.editorContainer.style.marginTop = `${this.menuContainer.offsetHeight}px`;
+  }
+
+  private removeMenu() {
+    if (this.menuContainer) {
+      this.menuContainer.remove();
+      this.menuContainer = null;
+    }
+
+    if (this.editorContainer) {
+      this.editorContainer.style.marginTop = '';
+      this.editorContainer = null;
+    }
   }
 
   private createIconButton(iconId: string, onClick: () => void, tooltip?: string): HTMLButtonElement {

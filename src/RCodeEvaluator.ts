@@ -1,70 +1,121 @@
-// src/RCodeEvaluator.ts
-
-import { Editor, MarkdownView, Notice, TFile, Platform } from 'obsidian';
-import CombinedPlugin from './CombinedPlugin';
-import { createHash } from 'crypto';
-import * as fs from 'fs';
-import * as path from 'path';
-import { promisify } from 'util';
+import { Editor, MarkdownView, Notice, TFile } from 'obsidian';
+import { createHash, randomUUID } from 'crypto';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
-import { mkdtemp } from 'fs/promises';
-import { REnvironmentView, VIEW_TYPE_R_ENVIRONMENT } from './REnvironmentView';
-import { RHelpView, VIEW_TYPE_R_HELP } from './RHelpView';
-const mkdtempAsync = promisify(fs.mkdtemp);
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { StringDecoder } from 'string_decoder';
+import CombinedPlugin from './CombinedPlugin';
+import { resolvePandocExecutable } from './ExecutableUtils';
 
-export async function runCurrentCodeChunk(plugin: CombinedPlugin, editor: Editor, view: MarkdownView, noteTitle: string) {
+const EXECUTION_TIMEOUT_MS = 60_000;
+const SESSION_IDLE_TIMEOUT_MS = 5 * 60_000;
+
+export interface EnvironmentVariable {
+  name: string;
+  type: string | string[];
+  size: number;
+  value: string[] | string;
+}
+
+interface ExecutionPayload {
+  output?: string;
+  imagePaths?: string[];
+  widgetPaths?: string[];
+  environment?: EnvironmentVariable[];
+  helpPath?: string | null;
+  error?: string | null;
+}
+
+export interface NoteRSession {
+  notePath: string;
+  process: ChildProcessWithoutNullStreams;
+  queue: Promise<void>;
+  idleTimer: ReturnType<typeof setTimeout> | null;
+}
+
+export async function runCurrentCodeChunk(
+  plugin: CombinedPlugin,
+  editor: Editor,
+  view: MarkdownView,
+  noteTitle: string
+) {
   const cursor = editor.getCursor();
-  const { startLine, endLine: originalEndLine, code, existingLabel, options } = getCurrentCodeChunk(editor, cursor.line);
+  const {
+    startLine,
+    endLine: originalEndLine,
+    code,
+    existingLabel,
+    options,
+  } = getCurrentCodeChunk(editor, cursor.line);
 
+  if (!code) {
+    new Notice('No R code chunk found at the cursor position.');
+    return;
+  }
+
+  const notePath = view.file?.path;
+  if (!notePath) {
+    new Notice('No file associated with the current view.');
+    return;
+  }
+
+  const uniqueId = existingLabel || generateUniqueId(startLine);
   let endLine = originalEndLine;
 
-  if (code) {
-    const uniqueId = existingLabel || generateUniqueId(startLine);
-    const notePath = view.file?.path;
-    if (notePath) {
-      if (!existingLabel) {
-        const linesInserted = insertLabel(editor, startLine, uniqueId);
-        endLine += linesInserted;
-      }
+  if (!existingLabel) {
+    endLine += insertLabel(editor, startLine, uniqueId);
+  }
 
-      try {
-        const { result, imagePaths, widgetPaths, helpContent } = await runRCodeInSession(
-          plugin,
-          notePath,
-          code,
-          noteTitle,
-          uniqueId,
-          isHelpRequest(code),
-          options
-        );
+  try {
+    const executionResult = await runRCodeInSession(
+      plugin,
+      notePath,
+      code,
+      noteTitle,
+      uniqueId,
+      options
+    );
 
-        if (isHelpRequest(code)) {
-          new Notice('Help content updated in the sidebar.');
-        } else {
-          const includeOption = options['include'] == 'false';
-          const outputOption = options['output'] == 'false';
-
-          if (result || imagePaths.length > 0 || widgetPaths.length > 0) {
-            insertOutputWithCallout(editor, endLine, result, imagePaths, widgetPaths, uniqueId, options);
-          }
-
-          if (outputOption || includeOption) {
-            removeOutputCallout(editor, uniqueId);
-          }
-        }
-      } catch (err) {
-        console.error('Error executing R code:', err);
-        if (options['error'] !== 'false' && options['include'] !== 'false' && options['output'] !== 'false') {
-          insertOutputWithCallout(editor, endLine, `Error:\n${err}`, [], [], uniqueId, options);
-        } else {
-          removeOutputCallout(editor, uniqueId);
-        }
-      }
-    } else {
-      new Notice('No file associated with the current view.');
+    if (isHelpRequest(code)) {
+      new Notice('Help content updated in the sidebar.');
+      return;
     }
-  } else {
-    new Notice('No R code chunk found at the cursor position.');
+
+    if (options['include'] === 'false' || options['output'] === 'false') {
+      removeOutputCallout(editor, uniqueId);
+      return;
+    }
+
+    if (
+      executionResult.result ||
+      executionResult.imagePaths.length > 0 ||
+      executionResult.widgetPaths.length > 0
+    ) {
+      insertOutputWithCallout(
+        editor,
+        endLine,
+        executionResult.result,
+        executionResult.imagePaths,
+        executionResult.widgetPaths,
+        uniqueId
+      );
+    } else {
+      removeOutputCallout(editor, uniqueId);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error executing R code:', error);
+
+    if (
+      options['error'] !== 'false' &&
+      options['include'] !== 'false' &&
+      options['output'] !== 'false'
+    ) {
+      insertOutputWithCallout(editor, endLine, message, [], [], uniqueId, true);
+    } else {
+      removeOutputCallout(editor, uniqueId);
+    }
   }
 }
 
@@ -90,7 +141,14 @@ export function getCurrentCodeChunk(
   }
 
   if (startLine < 0) {
-    return { startLine: -1, endLine: -1, code: '',codeWithAll: '', existingLabel: null, options: {} };
+    return {
+      startLine: -1,
+      endLine: -1,
+      code: '',
+      codeWithAll: '',
+      existingLabel: null,
+      options: {},
+    };
   }
 
   endLine = startLine + 1;
@@ -99,30 +157,47 @@ export function getCurrentCodeChunk(
   }
 
   if (endLine >= totalLines) {
-    return { startLine: -1, endLine: -1, code: '',codeWithAll:'', existingLabel: null, options: {} };
+    return {
+      startLine: -1,
+      endLine: -1,
+      code: '',
+      codeWithAll: '',
+      existingLabel: null,
+      options: {},
+    };
   }
 
   existingLabel = parseChunkLabel(editor, startLine);
   options = parseChunkOptions(editor, startLine);
 
-  const codeLines = [];
-  const codeLinesWithAll = [];
-  for (let i = startLine + 1; i < endLine; i++) {
-    const line = editor.getLine(i);
+  const codeLines: string[] = [];
+  const codeLinesWithAll: string[] = [];
+  for (let lineIndex = startLine + 1; lineIndex < endLine; lineIndex++) {
+    const line = editor.getLine(lineIndex);
     codeLinesWithAll.push(line);
     if (!line.trim().startsWith('#|')) {
       codeLines.push(line);
     }
   }
-  const code = codeLines.join('\n');
-  const codeWithAll = codeLinesWithAll.join('\n');
 
-  return { startLine, endLine, code, codeWithAll, existingLabel, options };
+  return {
+    startLine,
+    endLine,
+    code: codeLines.join('\n'),
+    codeWithAll: codeLinesWithAll.join('\n'),
+    existingLabel,
+    options,
+  };
+}
+
+export function stopAllRSessions(plugin: CombinedPlugin) {
+  for (const notePath of plugin.rSessions.keys()) {
+    destroyRSession(plugin, notePath);
+  }
 }
 
 function isCodeChunkStart(line: string): boolean {
-  line = line.trim();
-  return /^```{?r/.test(line);
+  return /^```{?r/.test(line.trim());
 }
 
 function parseChunkOptions(editor: Editor, startLine: number): { [key: string]: string } {
@@ -133,49 +208,27 @@ function parseChunkOptions(editor: Editor, startLine: number): { [key: string]: 
   while (lineIndex < totalLines) {
     const line = editor.getLine(lineIndex).trim();
     if (line.startsWith('#|')) {
-      const optionMatch = line.match(/^#\|\s*(\w+)\s*:\s*(.*)$/);
+      const optionMatch = line.match(/^#\|\s*([\w-]+)\s*:\s*(.*)$/);
       if (optionMatch) {
-        const key = optionMatch[1];
-        let value = optionMatch[2];
-        value = value.replace(/^["']|["']$/g, '');
-        options[key] = value;
+        options[optionMatch[1]] = optionMatch[2].replace(/^["']|["']$/g, '');
       }
       lineIndex++;
-    } else if (line === '' || line.startsWith('#')) {
-      lineIndex++;
-    } else {
-      break;
+      continue;
     }
+
+    if (line === '' || line.startsWith('#')) {
+      lineIndex++;
+      continue;
+    }
+
+    break;
   }
 
   return options;
 }
 
 function parseChunkLabel(editor: Editor, startLine: number): string | null {
-  let lineIndex = startLine + 1;
-  const totalLines = editor.lineCount();
-
-  while (lineIndex < totalLines) {
-    const line = editor.getLine(lineIndex).trim();
-    if (line.startsWith('#|')) {
-      const optionMatch = line.match(/^#\|\s*(\w+)\s*:\s*(.*)$/);
-      if (optionMatch) {
-        const key = optionMatch[1];
-        let value = optionMatch[2];
-        value = value.replace(/^["']|["']$/g, '');
-        if (key === 'label') {
-          return value;
-        }
-      }
-      lineIndex++;
-    } else if (line === '' || line.startsWith('#')) {
-      lineIndex++;
-    } else {
-      break;
-    }
-  }
-
-  return null;
+  return parseChunkOptions(editor, startLine).label || null;
 }
 
 function insertLabel(editor: Editor, startLine: number, uniqueId: string): number {
@@ -184,11 +237,10 @@ function insertLabel(editor: Editor, startLine: number, uniqueId: string): numbe
 
   while (insertPosition < totalLines) {
     const line = editor.getLine(insertPosition).trim();
-    if (line.startsWith('#|')) {
-      insertPosition++;
-    } else {
+    if (!line.startsWith('#|')) {
       break;
     }
+    insertPosition++;
   }
 
   editor.replaceRange(`#| label: ${uniqueId}\n`, { line: insertPosition, ch: 0 });
@@ -196,7 +248,8 @@ function insertLabel(editor: Editor, startLine: number, uniqueId: string): numbe
 }
 
 function generateUniqueId(position: number): string {
-  return createHash('sha256').update(position.toString()).digest('hex').substring(0, 8);
+  const suffix = createHash('sha256').update(position.toString()).digest('hex').substring(0, 8);
+  return `ridian-${suffix}`;
 }
 
 function isHelpRequest(code: string): boolean {
@@ -209,441 +262,592 @@ async function runRCodeInSession(
   code: string,
   noteTitle: string,
   uniqueId: string,
-  isHelpRequest: boolean,
   options: { [key: string]: string }
 ): Promise<{ result: string; imagePaths: string[]; widgetPaths: string[]; helpContent: string }> {
-  const rProcess = getRProcess(plugin, notePath);
+  const session = getOrCreateRSession(plugin, notePath);
 
-  return new Promise(async (resolve, reject) => {
-    let output = '';
-    let errorOutput = '';
+  return enqueueOnSession(plugin, session, async () => {
+    const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ridian-'));
+    const tempHelpPath = path.join(tempDir, `help_${uniqueId}.html`);
+    const requestId = randomUUID();
+    const startMarker = `__RIDIAN_RESULT_START__${requestId}__`;
+    const endMarker = `__RIDIAN_RESULT_END__${requestId}__`;
 
-    const tempDir = await mkdtempAsync(path.join(Platform.isWin ? 'C:\\Windows\\Temp\\' : '/tmp/', 'rplots-'));
-    const tempDirEscaped = Platform.isWin ? tempDir.replace(/\\/g, '\\\\') : tempDir.replace(/\\/g, '/');
+    try {
+      const pandocResolution = resolvePandocExecutable(plugin.settings.rstudioPandocPath);
+      const payload = await executeRRequest(
+        session.process,
+        buildExecutionScript({
+          code,
+          uniqueId,
+          options,
+          tempDir,
+          tempHelpPath,
+          startMarker,
+          endMarker,
+          pandocPath: pandocResolution.resolvedPath,
+        }),
+        startMarker,
+        endMarker
+      );
 
-    
-        const tempHelpFilePath = path.join(tempDir, `help_${uniqueId}.html`);
-// Use forward slashes in the R path, regardless of the platform
-        const tempHelpFilePathR = tempHelpFilePath.replace(/\\/g, '/');
+      const imagePaths = await persistBinaryFiles(plugin, payload.imagePaths || [], tempDir, 'plots');
+      const widgetPaths = await persistWidgetFiles(plugin, payload.widgetPaths || [], tempDir);
+      const helpContent = await loadHelpContent(payload.helpPath || tempHelpPath);
+      const environment = Array.isArray(payload.environment) ? payload.environment : [];
 
-
-    const marker = `__END_OF_OUTPUT__${Date.now()}__`;
-    const imageMarker = `__PLOT_PATH__`;
-    const envMarker = `__ENVIRONMENT_DATA__${Date.now()}__`;
-    const widgetMarker = `__WIDGET_PATH__`;
-
-    const optsCode = `
-    opts <- list(
-      echo = ${options['echo'] !== 'false' ? 'TRUE' : 'FALSE'},
-      warning = ${options['warning'] !== 'false' ? 'TRUE' : 'FALSE'},
-      error = ${options['error'] !== 'false' ? 'TRUE' : 'FALSE'},
-      include = ${options['include'] !== 'false' ? 'TRUE' : 'FALSE'},
-      output = ${options['output'] !== 'false' ? 'TRUE' : 'FALSE'}
-    )
-    `;
-
-    const wrappedCode = `
-library(evaluate)
-library(jsonlite)
-library(htmlwidgets)
-Sys.setenv(RSTUDIO_PANDOC='${plugin.settings.rstudioPandocPath}')
-
-${optsCode}
-
-custom_print_htmlwidget <- function(x, ..., viewer = NULL) {
-    widgetFileName <- paste0("widget_${uniqueId}_",".html")
-    widgetFilePath <- file.path("${tempDirEscaped}", widgetFileName)
-    saveWidget(x, widgetFilePath, selfcontained = TRUE)
-    cat("${widgetMarker}", widgetFileName, "\\n", sep="")
-}
-
-environment(custom_print_htmlwidget) <- asNamespace('htmlwidgets')
-assignInNamespace("print.htmlwidget", custom_print_htmlwidget, envir = as.environment("package:htmlwidgets"))
-
-timecheck <- Sys.time()
-
-.getHelpFile <- function(file)
-{
-    path <- dirname(file)
-    dirpath <- dirname(path)
-    if(!file.exists(dirpath))
-        stop(gettextf("invalid %s argument", sQuote("file")), domain = NA)
-    pkgname <- basename(dirpath)
-    RdDB <- file.path(path, pkgname)
-    if(!file.exists(paste(RdDB, "rdx", sep = ".")))
-        stop(gettextf("package %s exists but was not installed under R >= 2.10.0 so help cannot be accessed", sQuote(pkgname)), domain = NA)
-    tools:::fetchRdDB(RdDB, basename(file))
-}
-print.help_files_with_topic <- function(x, ...)
-{
-  browser <- getOption("browser")
-  topic <- attr(x, "topic")
-  type <- "text"
-  paths <- as.character(x)
-  
-  if(!length(paths)) {
-    writeLines(c(gettextf("No documentation for %s in specified packages and libraries:",
-                          sQuote(topic)),
-                 gettextf("you could try %s",
-                          sQuote(paste0("??", topic)))))
-    return(invisible(x))
-  }
-  
-  port <- NULL
-  
-  if(attr(x, "tried_all_packages")) {
-    paths <- unique(dirname(dirname(paths)))
-    msg <- gettextf("Help for topic %s is not in any loaded package but can be found in the following packages:",
-                    sQuote(topic))
-    
-      writeLines(c(strwrap(msg), "",
-                   paste(" ",
-                         formatDL(c(gettext("Package"), basename(paths)),
-                                  c(gettext("Library"), dirname(paths)),
-                                  indent = 22))))
-    } else {
-    if(length(paths) > 1L) {
-      file <- paths[1L]
-      p <- paths
-      msg <- gettextf("Help on topic %s was found in the following packages:",
-                      sQuote(topic))
-      paths <- dirname(dirname(paths))
-      txt <- formatDL(c("Package", basename(paths)),
-                      c("Library", dirname(paths)),
-                      indent = 22L)
-      writeLines(c(strwrap(msg), "", paste(" ", txt), ""))
-      if(interactive()) {
-        fp <- file.path(paths, "Meta", "Rd.rds")
-        tp <- basename(p)
-        titles <- tp
-        if(type == "html" || type == "latex")
-          tp <- tools::file_path_sans_ext(tp)
-        for (i in seq_along(fp)) {
-          tmp <- try(readRDS(fp[i]))
-          titles[i] <- if(inherits(tmp, "try-error"))
-            "unknown title" else
-              tmp[tools::file_path_sans_ext(tmp$File) == tp[i], "Title"]
-        }
-        txt <- paste0(titles, " {", basename(paths), "}")
-        ## the default on menu() is currtently graphics = FALSE
-        res <- menu(txt, title = gettext("Choose one"),
-                    graphics = getOption("menu.graphics"))
-        if(res > 0) file <- p[res]
-      } else {
-        writeLines(gettext("\nUsing the first match ..."))
+      plugin.publishEnvironmentData(notePath, noteTitle, environment);
+      if (helpContent) {
+        plugin.publishHelpContent(notePath, noteTitle, helpContent);
       }
-    }
-    else
-      file <- paths
-    
-    if(type == "text") {
-      pkgname <- basename(dirname(dirname(file)))
-      tools::Rd2HTML(.getHelpFile(file), out = "${tempHelpFilePathR}",
-                            package = pkgname)
 
-    }
-    
-  }
-  
-  invisible(x)
-}
-
-if (!exists("user_env")) {
-  user_env <- new.env()
-}
-
-results <- evaluate(${JSON.stringify(code)}, envir = user_env)
-
-outputs <- character()
-imagePaths <- character()
-
-for (res in results) {
-  if (inherits(res, "source")) {
-  } else if (inherits(res, "warning")) {
-    if (opts$warning && opts$include) {
-      outputs <- c(outputs, paste("Warning:", conditionMessage(res)))
-    }
-  } else if (inherits(res, "message")) {
-    if (opts$output && opts$include) {
-      outputs <- c(outputs, res$message)
-    }
-  } else if (inherits(res, "error")) {
-    if (opts$error && opts$include) {
-      outputs <- c(outputs, paste("Error:", conditionMessage(res)))
-    }
-  } else if (inherits(res, "character")) {
-    if (opts$output && opts$include) {
-      outputs <- c(outputs, res)
-    }
-  } else if (inherits(res, "recordedplot")) {
-    if (opts$output && opts$include) {
-      timestamp <- format(Sys.time(), "%Y%m%d%H%M%S")
-      plotFileName <- paste0("plot_${uniqueId}_", length(imagePaths) + 1, "_", timestamp, ".jpg")
-      plotFilePath <- file.path("${tempDirEscaped}", plotFileName)
-      jpeg(filename=plotFilePath, width=800, height=600)
-      replayPlot(res)
-      dev.off()
-      imagePaths <- c(imagePaths, plotFileName)
-    }
-  }
-}
-
-if (opts$output && opts$include) {
-  if (requireNamespace("gganimate", quietly = TRUE)) {
-    anim <- try(gganimate::last_animation(), silent = TRUE)
-    if (is.character(anim[1])) {
-      if (file.info(anim[1])$mtime > timecheck) {
-        timestamp <- format(Sys.time(), "%Y%m%d%H%M%S")
-        animFileName <- paste0("animation_${uniqueId}_", timestamp, ".gif")
-        animFilePath <- file.path("${tempDirEscaped}", animFileName)
-        file.copy(anim[1], animFilePath)
-        imagePaths <- c(imagePaths, animFileName)
+      if (payload.error) {
+        throw new Error(payload.error);
       }
+
+      return {
+        result: payload.output || '',
+        imagePaths,
+        widgetPaths,
+        helpContent,
+      };
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
     }
-  }
-}
-
-if (opts$output && opts$include && length(outputs) > 0) {
-  cat(paste(outputs, collapse = "\\n"), "\\n")
-}
-
-if (opts$output && opts$include) {
-  for (img in imagePaths) {
-    cat("${imageMarker}", img, "\\n", sep="")
-  }
-}
-
-vars <- ls(envir = user_env)
-env_list <- lapply(vars, function(var_name) {
-  var_value <- get(var_name, envir = user_env)
-  var_class <- class(var_value)
-  var_size <- as.numeric(object.size(var_value))
-  var_val <- capture.output(str(var_value, max.level=0))
-
-  list(
-    name = var_name,
-    type = var_class,
-    size = var_size,
-    value = var_val
-  )
-})
-
-env_json <- toJSON(env_list, auto_unbox = TRUE)
-cat("${envMarker}\\n")
-cat(env_json)
-cat("\\n${marker}\\n")
-    `;
-
-    const onData = async (data: Buffer) => {
-      const chunk = data.toString();
-      output += chunk;
-
-      if (output.includes(marker)) {
-        rProcess.stdout.off('data', onData);
-        rProcess.stderr.off('data', onErrorData);
-
-        let result = '';
-        let helpContent = '';
-
-        if (isHelpRequest) {
-          try {
-
-
-
-            // Check if the help file exists
-            if (fs.existsSync(tempHelpFilePath)) {
-              const helpDataRaw = await fs.promises.readFile(tempHelpFilePath, 'utf8');
-              helpContent = helpDataRaw;
-            } else {
-              console.error('Help file does not exist:', tempHelpFilePath);
-              helpContent = 'Failed to retrieve help content.';
-            }
-          } catch (e) {
-            console.error('Error reading help content:', e);
-            helpContent = 'Failed to retrieve help content.';
-          }
-        
-          const helpView = plugin.app.workspace.getLeavesOfType(VIEW_TYPE_R_HELP)[0]?.view as RHelpView;
-          if (helpView) {
-            helpView.updateHelpContent(helpContent);
-          }
-        }
-
-        let environmentData = '';
-        if (output.includes(envMarker)) {
-          const parts = output.split(envMarker);
-          result = parts[0].trim();
-          const envDataRaw = parts[1].split(marker)[0].trim();
-          environmentData = envDataRaw;
-        } else {
-          result = output.split(marker)[0].trim();
-        }
-
-        const escapedImageMarker = imageMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const imagePaths: string[] = [];
-        const imageRegex = new RegExp(`${escapedImageMarker}(.*)`, 'g');
-        let match;
-        while ((match = imageRegex.exec(result)) !== null) {
-          if (match[1]) {
-            const imageFileName = match[1].trim();
-            imagePaths.push(imageFileName);
-          }
-        }
-
-        result = result.replace(new RegExp(`${escapedImageMarker}.*`, 'g'), '').trim();
-
-        for (const imageFileName of imagePaths) {
-          const tempImagePath = path.join(tempDir, imageFileName);
-          try {
-            const imageData = await fs.promises.readFile(tempImagePath);
-            const vaultImagePath = `plots/${imageFileName}`;
-            const plotsFolder = plugin.app.vault.getAbstractFileByPath('plots');
-            if (!plotsFolder) {
-              await plugin.app.vault.createFolder('plots');
-            }
-            const existingFile = plugin.app.vault.getAbstractFileByPath(vaultImagePath);
-            if (!existingFile) {
-              await plugin.app.vault.createBinary(vaultImagePath, imageData);
-            } else {
-              await plugin.app.vault.modifyBinary(existingFile as TFile, imageData);
-            }
-            imagePaths[imagePaths.indexOf(imageFileName)] = vaultImagePath;
-          } catch (err) {
-            console.error(`Error handling image file ${imageFileName}:`, err);
-          }
-        }
-
-        const widgetPaths: string[] = [];
-        const escapedWidgetMarker = widgetMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const widgetRegex = new RegExp(`${escapedWidgetMarker}(.*)`, 'g');
-        let widgetMatch;
-        while ((widgetMatch = widgetRegex.exec(result)) !== null) {
-          if (widgetMatch[1]) {
-            const widgetFileName = widgetMatch[1].trim();
-            widgetPaths.push(widgetFileName);
-          }
-        }
-
-        result = result.replace(new RegExp(`${escapedWidgetMarker}.*`, 'g'), '').trim();
-
-        for (const widgetFileName of widgetPaths) {
-          const tempWidgetPath = path.join(tempDir, widgetFileName);
-          try {
-            const widgetData = await fs.promises.readFile(tempWidgetPath, 'utf8');
-            const vaultRelativeWidgetPath = `widgets/${widgetFileName}`;
-
-            const vaultBasePath = (plugin.app.vault.adapter as any).getBasePath();
-
-            const widgetsFolder = plugin.app.vault.getAbstractFileByPath('widgets');
-            if (!widgetsFolder) {
-              await plugin.app.vault.createFolder('widgets');
-            }
-
-            const existingWidgetFile = plugin.app.vault.getAbstractFileByPath(vaultRelativeWidgetPath);
-            if (!existingWidgetFile) {
-              await plugin.app.vault.create(vaultRelativeWidgetPath, widgetData);
-            } else {
-              await plugin.app.vault.modify(existingWidgetFile as TFile, widgetData);
-            }
-
-            const vaultWidgetPath = path.join(vaultBasePath, vaultRelativeWidgetPath);
-
-            const widgetFileUrl = 'file://' + vaultWidgetPath;
-
-            widgetPaths[widgetPaths.indexOf(widgetFileName)] = widgetFileUrl;
-          } catch (err) {
-            console.error(`Error handling widget file ${widgetFileName}:`, err);
-          }
-        }
-
-        try {
-          // await fs.promises.rm(tempDir, { recursive: true, force: true });
-        } catch (err) {
-          console.error(`Error removing temporary directory ${tempDir}:`, err);
-        }
-
-        const envView = plugin.app.workspace.getLeavesOfType(VIEW_TYPE_R_ENVIRONMENT)[0]?.view as REnvironmentView;
-        if (envView) {
-          let envVariables: any[] = [];
-          try {
-            envVariables = JSON.parse(environmentData);
-          } catch (e) {
-            console.error('Failed to parse environment data JSON:', e);
-          }
-          envView.updateEnvironmentData(noteTitle, envVariables);
-        }
-
-        output = '';
-        errorOutput = '';
-
-        if (errorOutput) {
-          reject(errorOutput.trim());
-        } else {
-          resolve({ result, imagePaths, widgetPaths, helpContent });
-        }
-      }
-    };
-
-    const onErrorData = (data: Buffer) => {
-      const chunk = data.toString();
-      errorOutput += chunk;
-    };
-
-    rProcess.stdout.on('data', onData);
-    rProcess.stderr.on('data', onErrorData);
-
-    rProcess.stdin.write(wrappedCode + '\n');
   });
 }
 
-function getRProcess(plugin: CombinedPlugin, notePath: string): ChildProcessWithoutNullStreams {
-  let rProcess = plugin.rProcesses.get(notePath);
-  if (!rProcess) {
-    rProcess = startRProcess(plugin, notePath);
+function getOrCreateRSession(plugin: CombinedPlugin, notePath: string): NoteRSession {
+  const existingSession = plugin.rSessions.get(notePath);
+  if (existingSession) {
+    return existingSession;
   }
-  return rProcess;
-}
 
-function startRProcess(plugin: CombinedPlugin, notePath: string): ChildProcessWithoutNullStreams {
-  const rExecutable = plugin.settings.rExecutablePath.trim() || '/usr/local/bin/R';
+  const rExecutable = plugin.getResolvedRExecutablePath();
   if (!rExecutable) {
-    new Notice('R executable path is not set. Please update the path in settings.');
-    throw new Error('R executable path is not set.');
+    throw new Error(
+      'R executable could not be resolved. Leave the setting blank for auto-detection or point it to the R executable file.'
+    );
   }
 
-  if (!fs.existsSync(rExecutable)) {
-    new Notice(`R executable not found at ${rExecutable}. Please update the path in settings.`);
-    throw new Error(`R executable not found at ${rExecutable}.`);
-  }
-
-  const env = { ...process.env };
-
-  const rProcess = spawn(rExecutable, ['--vanilla', '--quiet', '--slave'], { stdio: 'pipe', env });
-
-  rProcess.on('error', (err) => {
-    console.error(`Failed to start R process for ${notePath}:`, err);
+  const processEnv = { ...process.env };
+  const rProcess = spawn(rExecutable, ['--vanilla', '--quiet', '--slave'], {
+    stdio: 'pipe',
+    env: processEnv,
   });
 
-  const initCode = `
-library(jsonlite)
-if (!exists("user_env")) {
-  user_env <- new.env()
+  const session: NoteRSession = {
+    notePath,
+    process: rProcess,
+    queue: Promise.resolve(),
+    idleTimer: null,
+  };
+
+  rProcess.on('error', (error) => {
+    console.error(`Failed to start R process for ${notePath}:`, error);
+    destroyRSession(plugin, notePath);
+  });
+
+  rProcess.on('exit', (code, signal) => {
+    if (code !== null || signal !== null) {
+      console.warn(`R session for ${notePath} exited`, { code, signal });
+    }
+    destroyRSession(plugin, notePath);
+  });
+
+  rProcess.stdin.write(`${buildSessionBootstrap()}\n`);
+  plugin.rSessions.set(notePath, session);
+  return session;
 }
-options(browser='false')
-options(bitmapType = 'cairo')
-options(device = function(...) jpeg(filename = tempfile(), width=800, height=600, ...))
-  `;
-  rProcess.stdin.write(initCode + '\n');
 
-  plugin.rProcesses.set(notePath, rProcess);
+function enqueueOnSession<T>(
+  plugin: CombinedPlugin,
+  session: NoteRSession,
+  task: () => Promise<T>
+): Promise<T> {
+  if (session.idleTimer) {
+    clearTimeout(session.idleTimer);
+    session.idleTimer = null;
+  }
 
-  return rProcess;
+  const queuedTask = session.queue.then(task, task);
+  session.queue = queuedTask.then(
+    () => undefined,
+    () => undefined
+  );
+
+  return queuedTask.finally(() => {
+    session.idleTimer = setTimeout(() => {
+      destroyRSession(plugin, session.notePath);
+    }, SESSION_IDLE_TIMEOUT_MS);
+  });
 }
 
-function escapeMarkdown(text: string): string {
-  return text.replace(/([\\`*_{}[\]()#+\-!>|])/g, '\u200b$1');
+function destroyRSession(plugin: CombinedPlugin, notePath: string) {
+  const session = plugin.rSessions.get(notePath);
+  if (!session) {
+    return;
+  }
+
+  if (session.idleTimer) {
+    clearTimeout(session.idleTimer);
+  }
+
+  plugin.rSessions.delete(notePath);
+
+  if (!session.process.killed) {
+    session.process.kill();
+  }
 }
 
+function buildSessionBootstrap(): string {
+  return `
+options(browser = "false")
+options(encoding = "UTF-8")
+try(Sys.setlocale("LC_ALL", "C"), silent = TRUE)
+if (capabilities("cairo")) {
+  options(bitmapType = "cairo")
+}
+if (!exists("user_env", inherits = FALSE)) {
+  user_env <- new.env(parent = globalenv())
+}
+`;
+}
+
+function buildExecutionScript({
+  code,
+  uniqueId,
+  options,
+  tempDir,
+  tempHelpPath,
+  startMarker,
+  endMarker,
+  pandocPath,
+}: {
+  code: string;
+  uniqueId: string;
+  options: { [key: string]: string };
+  tempDir: string;
+  tempHelpPath: string;
+  startMarker: string;
+  endMarker: string;
+  pandocPath: string | null;
+}): string {
+  const boolLiteral = (value: string | undefined, defaultValue: boolean) =>
+    value === undefined ? defaultValue : value !== 'false';
+
+  return `
+local({
+  start_marker <- ${toRString(startMarker)}
+  end_marker <- ${toRString(endMarker)}
+  unique_id <- ${toRString(uniqueId)}
+  code_text <- ${toRString(code)}
+  temp_dir <- ${toRString(toRPath(tempDir))}
+  help_path <- ${toRString(toRPath(tempHelpPath))}
+  pandoc_path <- ${toRString(pandocPath || '')}
+  opts <- list(
+    echo = ${boolLiteral(options.echo, true) ? 'TRUE' : 'FALSE'},
+    warning = ${boolLiteral(options.warning, true) ? 'TRUE' : 'FALSE'},
+    error = ${boolLiteral(options.error, true) ? 'TRUE' : 'FALSE'},
+    include = ${boolLiteral(options.include, true) ? 'TRUE' : 'FALSE'},
+    output = ${boolLiteral(options.output, true) ? 'TRUE' : 'FALSE'}
+  )
+
+  emit_json <- function(payload_json) {
+    cat(start_marker, payload_json, end_marker, sep = "")
+  }
+
+  emit_error_payload <- function(message) {
+    safe <- gsub("\\\\", "\\\\\\\\", message)
+    safe <- gsub("\"", "\\\\\\"", safe)
+    safe <- gsub("\\n", "\\\\n", safe)
+    emit_json(paste0(
+      '{"output":"","imagePaths":[],"widgetPaths":[],"environment":[],"helpPath":null,"error":"',
+      safe,
+      '"}'
+    ))
+  }
+
+  if (!requireNamespace("jsonlite", quietly = TRUE)) {
+    emit_error_payload("Required R package 'jsonlite' is not installed.")
+  } else if (!requireNamespace("evaluate", quietly = TRUE)) {
+    emit_error_payload("Required R package 'evaluate' is not installed.")
+  } else {
+    payload <- list(
+      output = "",
+      imagePaths = character(),
+      widgetPaths = character(),
+      environment = list(),
+      helpPath = NULL,
+      error = NULL
+    )
+
+    tryCatch({
+      suppressPackageStartupMessages({
+        library(jsonlite)
+        library(evaluate)
+      })
+
+      if (nzchar(pandoc_path)) {
+        Sys.setenv(RSTUDIO_PANDOC = pandoc_path)
+      }
+
+      has_htmlwidgets <- requireNamespace("htmlwidgets", quietly = TRUE)
+      if (has_htmlwidgets) {
+        custom_print_htmlwidget <- function(x, ..., viewer = NULL) {
+          widget_file_name <- paste0("widget_", unique_id, "_", format(Sys.time(), "%Y%m%d%H%M%S"), ".html")
+          widget_file_path <- file.path(temp_dir, widget_file_name)
+          htmlwidgets::saveWidget(x, widget_file_path, selfcontained = TRUE)
+          payload$widgetPaths <- c(payload$widgetPaths, widget_file_name)
+        }
+
+        environment(custom_print_htmlwidget) <- asNamespace("htmlwidgets")
+        assignInNamespace(
+          "print.htmlwidget",
+          custom_print_htmlwidget,
+          envir = as.environment("package:htmlwidgets")
+        )
+      }
+
+      timecheck <- Sys.time()
+
+      .getHelpFile <- function(file) {
+        help_meta_path <- dirname(file)
+        package_root <- dirname(help_meta_path)
+        if (!file.exists(package_root)) {
+          stop(gettextf("invalid %s argument", sQuote("file")), domain = NA)
+        }
+        package_name <- basename(package_root)
+        rd_db <- file.path(help_meta_path, package_name)
+        if (!file.exists(paste(rd_db, "rdx", sep = "."))) {
+          stop(
+            gettextf(
+              "package %s exists but was not installed under R >= 2.10.0 so help cannot be accessed",
+              sQuote(package_name)
+            ),
+            domain = NA
+          )
+        }
+        tools:::fetchRdDB(rd_db, basename(file))
+      }
+
+      print.help_files_with_topic <- function(x, ...) {
+        topic <- attr(x, "topic")
+        paths <- as.character(x)
+
+        if (!length(paths)) {
+          writeLines(c(
+            gettextf("No documentation for %s in specified packages and libraries:", sQuote(topic)),
+            gettextf("you could try %s", sQuote(paste0("??", topic)))
+          ))
+          return(invisible(x))
+        }
+
+        file <- paths[1L]
+        package_name <- basename(dirname(dirname(file)))
+        tools::Rd2HTML(.getHelpFile(file), out = help_path, package = package_name)
+        payload$helpPath <- help_path
+        invisible(x)
+      }
+
+      results <- evaluate::evaluate(code_text, envir = user_env)
+      outputs <- character()
+      image_paths <- character()
+
+      for (res in results) {
+        if (inherits(res, "source")) {
+          next
+        }
+
+        if (inherits(res, "warning")) {
+          if (opts$warning && opts$include) {
+            outputs <- c(outputs, paste("Warning:", conditionMessage(res)))
+          }
+          next
+        }
+
+        if (inherits(res, "message")) {
+          if (opts$output && opts$include) {
+            outputs <- c(outputs, conditionMessage(res))
+          }
+          next
+        }
+
+        if (inherits(res, "error")) {
+          if (opts$error && opts$include) {
+            outputs <- c(outputs, paste("Error:", conditionMessage(res)))
+          }
+          next
+        }
+
+        if (inherits(res, "character")) {
+          if (opts$output && opts$include) {
+            outputs <- c(outputs, res)
+          }
+          next
+        }
+
+        if (inherits(res, "recordedplot")) {
+          if (opts$output && opts$include) {
+            timestamp <- format(Sys.time(), "%Y%m%d%H%M%S")
+            plot_file_name <- paste0("plot_", unique_id, "_", length(image_paths) + 1, "_", timestamp, ".jpg")
+            plot_file_path <- file.path(temp_dir, plot_file_name)
+            grDevices::jpeg(filename = plot_file_path, width = 800, height = 600)
+            replayPlot(res)
+            grDevices::dev.off()
+            image_paths <- c(image_paths, plot_file_name)
+          }
+        }
+      }
+
+      if (opts$output && opts$include && requireNamespace("gganimate", quietly = TRUE)) {
+        anim <- try(gganimate::last_animation(), silent = TRUE)
+        if (is.character(anim[1]) && file.exists(anim[1])) {
+          if (file.info(anim[1])$mtime > timecheck) {
+            timestamp <- format(Sys.time(), "%Y%m%d%H%M%S")
+            animation_file_name <- paste0("animation_", unique_id, "_", timestamp, ".gif")
+            animation_file_path <- file.path(temp_dir, animation_file_name)
+            file.copy(anim[1], animation_file_path)
+            image_paths <- c(image_paths, animation_file_name)
+          }
+        }
+      }
+
+      if (opts$output && opts$include && length(outputs) > 0) {
+        payload$output <- paste(outputs, collapse = "\\n")
+      }
+
+      payload$imagePaths <- unname(image_paths)
+
+      vars <- ls(envir = user_env)
+      payload$environment <- lapply(vars, function(var_name) {
+        var_value <- get(var_name, envir = user_env)
+        list(
+          name = var_name,
+          type = class(var_value),
+          size = as.numeric(object.size(var_value)),
+          value = capture.output(str(var_value, max.level = 0))
+        )
+      })
+    }, error = function(err) {
+      payload$error <- conditionMessage(err)
+    })
+
+    emit_json(jsonlite::toJSON(payload, auto_unbox = TRUE, null = "null", force = TRUE))
+  }
+})
+`;
+}
+
+function toRString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function toRPath(value: string): string {
+  return value.replace(/\\/g, '/');
+}
+
+async function executeRRequest(
+  rProcess: ChildProcessWithoutNullStreams,
+  code: string,
+  startMarker: string,
+  endMarker: string
+): Promise<ExecutionPayload> {
+  return new Promise((resolve, reject) => {
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
+    let stdoutBuffer = '';
+    let stderrBuffer = '';
+    let settled = false;
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      rProcess.stdout.off('data', onStdout);
+      rProcess.stderr.off('data', onStderr);
+      rProcess.off('error', onError);
+      rProcess.off('exit', onExit);
+    };
+
+    const settle = (handler: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      handler();
+    };
+
+    const tryResolvePayload = () => {
+      const payloadJson = extractBetween(stdoutBuffer, startMarker, endMarker);
+      if (!payloadJson) {
+        return;
+      }
+
+      settle(() => {
+        try {
+          resolve(JSON.parse(payloadJson) as ExecutionPayload);
+        } catch (error) {
+          reject(
+            new Error(
+              `Failed to parse R execution payload: ${
+                error instanceof Error ? error.message : String(error)
+              }`
+            )
+          );
+        }
+      });
+    };
+
+    const onStdout = (chunk: Buffer) => {
+      stdoutBuffer += stdoutDecoder.write(chunk);
+      tryResolvePayload();
+    };
+
+    const onStderr = (chunk: Buffer) => {
+      stderrBuffer += stderrDecoder.write(chunk);
+    };
+
+    const onError = (error: Error) => {
+      settle(() => {
+        reject(error);
+      });
+    };
+
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      stdoutBuffer += stdoutDecoder.end();
+      stderrBuffer += stderrDecoder.end();
+      tryResolvePayload();
+
+      settle(() => {
+        const stderrSuffix = stderrBuffer.trim() ? ` ${stderrBuffer.trim()}` : '';
+        reject(
+          new Error(
+            `R session exited before returning a result (code=${code}, signal=${signal}).${stderrSuffix}`
+          )
+        );
+      });
+    };
+
+    const timeout = setTimeout(() => {
+      settle(() => {
+        reject(
+          new Error(
+            `R execution timed out after ${EXECUTION_TIMEOUT_MS / 1000}s.${
+              stderrBuffer.trim() ? ` ${stderrBuffer.trim()}` : ''
+            }`
+          )
+        );
+      });
+    }, EXECUTION_TIMEOUT_MS);
+
+    rProcess.stdout.on('data', onStdout);
+    rProcess.stderr.on('data', onStderr);
+    rProcess.on('error', onError);
+    rProcess.on('exit', onExit);
+
+    rProcess.stdin.write(`${code}\n`, (error) => {
+      if (error) {
+        settle(() => {
+          reject(error);
+        });
+      }
+    });
+  });
+}
+
+function extractBetween(buffer: string, startMarker: string, endMarker: string): string | null {
+  const startIndex = buffer.indexOf(startMarker);
+  if (startIndex === -1) {
+    return null;
+  }
+
+  const endIndex = buffer.indexOf(endMarker, startIndex + startMarker.length);
+  if (endIndex === -1) {
+    return null;
+  }
+
+  return buffer.slice(startIndex + startMarker.length, endIndex);
+}
+
+async function persistBinaryFiles(
+  plugin: CombinedPlugin,
+  fileNames: string[],
+  tempDir: string,
+  vaultFolder: string
+): Promise<string[]> {
+  const resolvedPaths: string[] = [];
+  await ensureVaultFolder(plugin, vaultFolder);
+
+  for (const fileName of fileNames) {
+    const sourcePath = path.join(tempDir, fileName);
+    const data = await fs.promises.readFile(sourcePath);
+    const vaultPath = `${vaultFolder}/${fileName}`;
+    const targetFile = await upsertBinaryFile(plugin, vaultPath, data);
+    resolvedPaths.push(targetFile.path);
+  }
+
+  return resolvedPaths;
+}
+
+async function persistWidgetFiles(
+  plugin: CombinedPlugin,
+  fileNames: string[],
+  tempDir: string
+): Promise<string[]> {
+  const resolvedPaths: string[] = [];
+  await ensureVaultFolder(plugin, 'widgets');
+
+  for (const fileName of fileNames) {
+    const sourcePath = path.join(tempDir, fileName);
+    const data = await fs.promises.readFile(sourcePath, 'utf8');
+    const vaultPath = `widgets/${fileName}`;
+    const targetFile = await upsertTextFile(plugin, vaultPath, data);
+    resolvedPaths.push(plugin.app.vault.getResourcePath(targetFile));
+  }
+
+  return resolvedPaths;
+}
+
+async function ensureVaultFolder(plugin: CombinedPlugin, folderPath: string) {
+  if (plugin.app.vault.getAbstractFileByPath(folderPath)) {
+    return;
+  }
+
+  await plugin.app.vault.createFolder(folderPath);
+}
+
+async function upsertBinaryFile(plugin: CombinedPlugin, vaultPath: string, data: ArrayBuffer) {
+  const existingFile = plugin.app.vault.getAbstractFileByPath(vaultPath);
+  if (existingFile instanceof TFile) {
+    await plugin.app.vault.modifyBinary(existingFile, data);
+    return existingFile;
+  }
+
+  return plugin.app.vault.createBinary(vaultPath, data);
+}
+
+async function upsertTextFile(plugin: CombinedPlugin, vaultPath: string, data: string) {
+  const existingFile = plugin.app.vault.getAbstractFileByPath(vaultPath);
+  if (existingFile instanceof TFile) {
+    await plugin.app.vault.modify(existingFile, data);
+    return existingFile;
+  }
+
+  return plugin.app.vault.create(vaultPath, data);
+}
+
+async function loadHelpContent(helpPath: string): Promise<string> {
+  try {
+    if (!helpPath || !fs.existsSync(helpPath)) {
+      return '';
+    }
+
+    return await fs.promises.readFile(helpPath, 'utf8');
+  } catch (error) {
+    console.error('Failed to load help content:', error);
+    return '';
+  }
+}
 
 function insertOutputWithCallout(
   editor: Editor,
@@ -652,104 +856,85 @@ function insertOutputWithCallout(
   imagePaths: string[],
   widgetPaths: string[],
   uniqueId: string,
-  options: { [key: string]: string },
   isError: boolean = false
 ) {
   const contentLines: string[] = [];
-  const contentLines2: string[] = [];
-  
-  if (output && output.trim() !== '') {
-    const escapedOutput = escapeMarkdown(output.trim());
-    const outputLines = escapedOutput.split('\n').map((line) => '> ' + line);
-    contentLines.push(...outputLines);
+  const mediaLines: string[] = [];
+
+  if (output.trim()) {
+    contentLines.push(...output.trimEnd().split('\n').map((line) => `> ${line}`));
   }
 
-  imagePaths.forEach((imagePath) => {
-    const vaultImagePath = `${imagePath}`;
-    const imageMarkdown = `![center|480](${vaultImagePath})`;
-    contentLines2.push(`> ${imageMarkdown}`);
-  });
+  for (const imagePath of imagePaths) {
+    mediaLines.push(`> ![center|480](${imagePath})`);
+  }
 
-  widgetPaths.forEach((widgetPath) => {
-    const widgetMarkdown = `<iframe src="${widgetPath}" width="100%" height="680px"></iframe>`;
-    contentLines2.push(`> ${widgetMarkdown}`);
-  });
+  for (const widgetPath of widgetPaths) {
+    mediaLines.push(`> <iframe src="${widgetPath}" width="100%" height="680px"></iframe>`);
+  }
 
-  if (contentLines.length === 0 && contentLines2.length === 0) {
+  if (contentLines.length === 0 && mediaLines.length === 0) {
     return;
   }
 
   const calloutType = isError ? 'ERROR' : 'OUTPUT';
-  const calloutTitle = `> [!${calloutType}]+ {#output-${uniqueId}}`;
-  
-  let outputContent = `${calloutTitle}\n`;
-  if (contentLines.length !== 0) {
-    outputContent += '> \`\`\`\n';
-  outputContent += contentLines.join('\n') + '\n';
-  outputContent += '> \`\`\`\n';
-  } 
-  if (contentLines2.length !== 0) {
-  outputContent += contentLines2.join('\n') + '\n';
-  outputContent += '> \n';
+  let outputContent = `> [!${calloutType}]+ {#output-${uniqueId}}\n`;
+
+  if (contentLines.length > 0) {
+    outputContent += '> ```text\n';
+    outputContent += `${contentLines.join('\n')}\n`;
+    outputContent += '> ```\n';
   }
 
-  let existingOutputStart = -1;
-  let existingOutputEnd = -1;
-  const totalLines = editor.lineCount();
-
-  for (let i = 0; i < totalLines; i++) {
-    const line = editor.getLine(i);
-    if (line.trim().startsWith(`> [!${calloutType}]`) && line.includes(`{#output-${uniqueId}}`)) {
-      existingOutputStart = i;
-      existingOutputEnd = i;
-      while (existingOutputEnd + 1 < totalLines) {
-        const nextLine = editor.getLine(existingOutputEnd + 1);
-        if (nextLine.trim() === '' || nextLine.startsWith('> ')) {
-          existingOutputEnd++;
-        } else {
-          break;
-        }
-      }
-      break;
-    }
+  if (mediaLines.length > 0) {
+    outputContent += `${mediaLines.join('\n')}\n`;
   }
 
-  if (existingOutputStart !== -1 && existingOutputEnd !== -1) {
-    const from = { line: existingOutputStart, ch: 0 };
-    const to = { line: existingOutputEnd + 1, ch: 0 };
-    editor.replaceRange(outputContent + '\n', from, to);
-  } else {
-    const insertPosition = { line: endLine + 1, ch: 0 };
-    editor.replaceRange('\n' + outputContent + '\n', insertPosition);
+  const existingOutput = findExistingOutputRange(editor, uniqueId);
+  if (existingOutput) {
+    editor.replaceRange(`${outputContent}\n`, existingOutput.from, existingOutput.to);
+    return;
   }
+
+  editor.replaceRange(`\n${outputContent}\n`, { line: endLine + 1, ch: 0 });
 }
 
-
-
 function removeOutputCallout(editor: Editor, uniqueId: string) {
-    let existingOutputStart = -1;
-    let existingOutputEnd = -1;
-    const totalLines = editor.lineCount();
-  
-    for (let i = 0; i < totalLines; i++) {
-      const line = editor.getLine(i);
-      if (line.trim() === `> [!OUTPUT]+ {#output-${uniqueId}}`) {
-        existingOutputStart = i;
-        existingOutputEnd = i;
-        while (existingOutputEnd + 1 < totalLines) {
-          const nextLine = editor.getLine(existingOutputEnd + 1);
-          if (!nextLine.startsWith('> ') && nextLine.trim() !== '') {
-            break;
-          }
-          existingOutputEnd++;
+  const existingOutput = findExistingOutputRange(editor, uniqueId);
+  if (!existingOutput) {
+    return;
+  }
+
+  editor.replaceRange('', existingOutput.from, existingOutput.to);
+}
+
+function findExistingOutputRange(
+  editor: Editor,
+  uniqueId: string
+): { from: { line: number; ch: number }; to: { line: number; ch: number } } | null {
+  const totalLines = editor.lineCount();
+
+  for (let lineIndex = 0; lineIndex < totalLines; lineIndex++) {
+    const line = editor.getLine(lineIndex).trim();
+    if (
+      (line.startsWith('> [!OUTPUT]+') || line.startsWith('> [!ERROR]+')) &&
+      line.includes(`{#output-${uniqueId}}`)
+    ) {
+      let endLine = lineIndex;
+      while (endLine + 1 < totalLines) {
+        const nextLine = editor.getLine(endLine + 1);
+        if (!nextLine.startsWith('> ') && nextLine.trim() !== '') {
+          break;
         }
-        break;
+        endLine++;
       }
-    }
-  
-    if (existingOutputStart !== -1 && existingOutputEnd !== -1) {
-      const from = { line: existingOutputStart, ch: 0 };
-      const to = { line: existingOutputEnd + 1, ch: 0 };
-      editor.replaceRange('', from, to);
+
+      return {
+        from: { line: lineIndex, ch: 0 },
+        to: { line: endLine + 1, ch: 0 },
+      };
     }
   }
+
+  return null;
+}
